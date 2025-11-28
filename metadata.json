@@ -1,0 +1,5 @@
+{
+  "name": "PTT Manager",
+  "description": "A comprehensive travel agency management application integrated with Firebase. Features multi-role access (Admin/Host), tour creation, automated bus fare calculations, agency settlements, and financial analysis.",
+  "requestFramePermissions": []
+}
