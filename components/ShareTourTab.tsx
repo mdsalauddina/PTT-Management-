@@ -26,20 +26,17 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
 
   const activeTour = tours.find(t => t.id === selectedTourId) || null;
 
-  if (user.role !== 'admin') return <div className="h-full flex items-center justify-center text-rose-400 font-bold p-10 bg-rose-50 m-4 rounded-3xl border border-rose-100">শুধুমাত্র এডমিন এক্সেস</div>;
+  if (user.role !== 'admin') return <div className="h-full flex items-center justify-center text-rose-400 font-bold p-10 bg-rose-50 m-4 rounded-3xl border border-rose-100">Restricted Access: Admin Only</div>;
   
   if (!activeTour) return (
-    <div className="h-full flex flex-col items-center justify-center p-10 text-center text-slate-400">
-        <div className="bg-slate-100 p-6 rounded-full mb-4"><Users size={32} /></div>
-        <p className="font-bold text-sm">কোন ট্যুর ডাটা পাওয়া যায়নি</p>
+    <div className="h-full flex flex-col items-center justify-center p-20 text-center text-slate-400">
+        <div className="bg-slate-100 p-8 rounded-full mb-6 animate-pulse"><Users size={32} /></div>
+        <p className="font-bold text-sm">No Tour Data Available</p>
     </div>
   );
 
   const updateTourAgencies = async (agencies: PartnerAgency[]) => {
-      if (!activeTour || !activeTour.id) {
-          alert("Error: Active tour ID missing");
-          return;
-      }
+      if (!activeTour || !activeTour.id) return;
       try {
           const tourRef = doc(db, 'tours', activeTour.id);
           const cleanAgencies = JSON.parse(JSON.stringify(agencies));
@@ -47,7 +44,6 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
           await refreshTours();
       } catch (e) {
           console.error("Error updating tour agencies", e);
-          alert("Error updating data. Please try again.");
       }
   };
 
@@ -72,7 +68,7 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
 
   const addBookingToAgency = async (agencyId: string) => {
       if (!newBooking.name || !newBooking.seatCount) {
-          alert("নাম এবং সিট সংখ্যা দিন");
+          alert("Please provide Name and Seat Count");
           return;
       }
 
@@ -115,7 +111,7 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
         if (e.nativeEvent) e.nativeEvent.stopImmediatePropagation();
       }
 
-      if(!window.confirm("আপনি কি নিশ্চিত এই গেস্ট ডিলিট করতে চান?")) return;
+      if(!window.confirm("Delete this guest?")) return;
       
       if (!activeTour.partnerAgencies) return;
 
@@ -177,14 +173,14 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
   };
 
   return (
-    <div className="p-4 space-y-6 animate-fade-in pb-24 lg:pb-10 max-w-6xl mx-auto">
+    <div className="space-y-6 animate-fade-in max-w-6xl mx-auto">
       {/* Selector */}
       <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 relative z-20">
         <div className="p-3 bg-blue-50 rounded-xl text-blue-600">
             <Users size={20} />
         </div>
         <div className="flex-1">
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">এজেন্সি ও বুকিং</label>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Manage Agency Partners</label>
             <div className="relative">
                 <select 
                     value={selectedTourId}
@@ -198,68 +194,70 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
         </div>
       </div>
 
-      <div className="flex justify-between items-center bg-white/60 backdrop-blur-md p-4 rounded-[1.5rem] shadow-sm border border-slate-100 sticky top-0 z-10">
+      <div className="flex justify-between items-center bg-white/70 backdrop-blur-md p-4 rounded-[1.5rem] shadow-glass border border-white/50 sticky top-4 z-30">
         <div>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Partner Agencies</p>
-            <h2 className="font-bold text-slate-700 text-sm">Manage Partners</h2>
+            <h2 className="font-bold text-slate-800 text-sm">Partner List</h2>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Active Collaboration</p>
         </div>
         <button onClick={() => setShowAddAgency(true)} className="bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs flex items-center font-bold shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all active:scale-95 uppercase tracking-wide">
-            <Plus size={14} className="mr-2"/> যুক্ত করুন
+            <Plus size={14} className="mr-2"/> Add Partner
         </button>
       </div>
 
       {showAddAgency && (
-          <div className="bg-white p-6 rounded-[2rem] shadow-2xl border border-blue-100 animate-fade-in mb-4 relative overflow-hidden max-w-lg mx-auto z-20">
-              <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-500"></div>
-              <h3 className="text-xs font-bold text-blue-600 mb-6 uppercase tracking-widest flex items-center gap-2">
-                  <Briefcase size={14}/> নতুন এজেন্সির তথ্য
-              </h3>
-              <div className="space-y-4">
-                  <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">এজেন্সির নাম</label>
-                      <input placeholder="যেমন: স্কাই ট্রাভেলস" className="w-full border border-slate-200 bg-slate-50 p-4 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all font-semibold" value={newAgency.name} onChange={e => setNewAgency({...newAgency, name: e.target.value})} />
-                  </div>
-                   <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">এজেন্সির ইমেইল (লগইন এর জন্য)</label>
-                      <input type="email" placeholder="agent@gmail.com" className="w-full border border-slate-200 bg-slate-50 p-4 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all font-semibold" value={newAgency.email} onChange={e => setNewAgency({...newAgency, email: e.target.value})} />
-                  </div>
-                  <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">মোবাইল নাম্বার</label>
-                      <input placeholder="017..." className="w-full border border-slate-200 bg-slate-50 p-4 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all font-semibold" value={newAgency.phone} onChange={e => setNewAgency({...newAgency, phone: e.target.value})} />
-                  </div>
-              </div>
-              <div className="flex justify-end gap-3 mt-6">
-                  <button onClick={() => setShowAddAgency(false)} className="px-5 py-2.5 rounded-xl text-slate-500 text-xs hover:bg-slate-100 transition-colors font-bold uppercase tracking-wide">বাতিল</button>
-                  <button onClick={handleAddAgency} className="bg-blue-600 text-white px-6 py-2.5 rounded-xl text-xs font-bold shadow-lg shadow-blue-500/30 hover:bg-blue-700 transition-all uppercase tracking-wide">তৈরি করুন</button>
-              </div>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white p-8 rounded-[2rem] shadow-2xl border border-white w-full max-w-md relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-500 to-cyan-500"></div>
+                <h3 className="text-sm font-bold text-slate-800 mb-6 uppercase tracking-widest flex items-center gap-2">
+                    <Briefcase size={16} className="text-blue-500"/> New Agency Profile
+                </h3>
+                <div className="space-y-4">
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Agency Name</label>
+                        <input className="w-full border border-slate-200 bg-slate-50 p-4 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all font-semibold" placeholder="e.g. Sky Travels" value={newAgency.name} onChange={e => setNewAgency({...newAgency, name: e.target.value})} />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Login Email</label>
+                        <input type="email" className="w-full border border-slate-200 bg-slate-50 p-4 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all font-semibold" placeholder="agent@email.com" value={newAgency.email} onChange={e => setNewAgency({...newAgency, email: e.target.value})} />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Phone</label>
+                        <input className="w-full border border-slate-200 bg-slate-50 p-4 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all font-semibold" placeholder="017..." value={newAgency.phone} onChange={e => setNewAgency({...newAgency, phone: e.target.value})} />
+                    </div>
+                </div>
+                <div className="flex justify-end gap-3 mt-8">
+                    <button onClick={() => setShowAddAgency(false)} className="px-5 py-2.5 rounded-xl text-slate-500 text-xs hover:bg-slate-100 transition-colors font-bold uppercase tracking-wide">Cancel</button>
+                    <button onClick={handleAddAgency} className="bg-blue-600 text-white px-6 py-2.5 rounded-xl text-xs font-bold shadow-lg shadow-blue-500/30 hover:bg-blue-700 transition-all uppercase tracking-wide">Create Profile</button>
+                </div>
+            </div>
           </div>
       )}
 
-      <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
+      <div className="grid gap-5 grid-cols-1 lg:grid-cols-2">
         {activeTour.partnerAgencies && activeTour.partnerAgencies.map(agency => {
             const settlement = calculateAgencySettlement(activeTour, agency);
             const isExpanded = expandedAgency === agency.id;
             
             return (
-              <div key={agency.id} className={`bg-white rounded-[2rem] shadow-sm border overflow-hidden transition-all duration-300 flex flex-col ${isExpanded ? 'border-violet-200 ring-4 ring-violet-50 col-span-1 lg:col-span-2 shadow-xl' : 'border-slate-100 hover:shadow-md'}`}>
+              <div key={agency.id} className={`bg-white rounded-[2rem] shadow-sm border overflow-hidden transition-all duration-300 flex flex-col ${isExpanded ? 'border-violet-200 ring-4 ring-violet-50/50 col-span-1 lg:col-span-2 shadow-xl' : 'border-slate-100 hover:shadow-md'}`}>
                   <div 
                     onClick={() => setExpandedAgency(isExpanded ? null : agency.id)}
                     className={`p-6 flex justify-between items-center cursor-pointer transition-colors ${isExpanded ? 'bg-slate-50/50 border-b border-slate-100' : 'hover:bg-slate-50/30'}`}
                   >
-                      <div className="flex items-center gap-4">
-                          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${isExpanded ? 'bg-violet-600 text-white shadow-lg shadow-violet-200' : 'bg-slate-100 text-slate-400'}`}>
+                      <div className="flex items-center gap-5">
+                          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${isExpanded ? 'bg-violet-600 text-white shadow-lg shadow-violet-200' : 'bg-slate-50 text-slate-300 border border-slate-100'}`}>
                               {isExpanded ? <FolderOpen size={24} /> : <Users size={24} />}
                           </div>
                           <div>
                               <h3 className={`font-black text-lg leading-tight ${isExpanded ? 'text-violet-900' : 'text-slate-800'}`}>{agency.name}</h3>
-                              <p className="text-[11px] text-slate-500 font-bold flex items-center mt-1"><Mail size={10} className="mr-1"/> {agency.email || 'No Email'}</p>
+                              <p className="text-[11px] text-slate-400 font-bold flex items-center mt-1"><Mail size={10} className="mr-1.5"/> {agency.email || 'No Email Linked'}</p>
                           </div>
                       </div>
                       <div className="flex items-center gap-4">
                           <div className="text-right hidden sm:block bg-white px-4 py-2 rounded-xl border border-slate-100 shadow-sm">
-                              <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Net Settlement</p>
+                              <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Settlement</p>
                               <p className={`text-sm font-black ${settlement.netAmount >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                  {settlement.netAmount >= 0 ? '+' : ''}{settlement.netAmount} ৳
+                                  {settlement.netAmount >= 0 ? '+' : ''}{settlement.netAmount.toLocaleString()} ৳
                               </p>
                           </div>
                           <div className={`p-2 rounded-full transition-transform duration-300 ${isExpanded ? 'rotate-180 bg-violet-100 text-violet-600' : 'bg-slate-50 text-slate-400'}`}>
@@ -273,11 +271,11 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
                         {/* Summary Grid */}
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
                             <div className="bg-white p-4 rounded-2xl border border-slate-100 text-center shadow-sm">
-                                <p className="text-[9px] text-slate-400 font-bold uppercase mb-1">Total Guests</p>
+                                <p className="text-[9px] text-slate-400 font-bold uppercase mb-1">Seats</p>
                                 <p className="text-2xl font-black text-slate-800">{settlement.totalSeats}</p>
                             </div>
                             <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100 text-center">
-                                <p className="text-[9px] text-orange-600 font-bold uppercase mb-1">Buy Rate (Reg)</p>
+                                <p className="text-[9px] text-orange-600 font-bold uppercase mb-1">Buy Rate</p>
                                 <p className="text-xl font-black text-orange-700">৳{settlement.rates.regular.toLocaleString()}</p>
                             </div>
                             <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 text-center">
@@ -286,20 +284,20 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
                             </div>
                              <div className={`p-4 rounded-2xl border text-center ${settlement.netAmount >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-rose-50 border-rose-100'}`}>
                                 <p className={`text-[9px] font-bold uppercase mb-1 ${settlement.netAmount >= 0 ? 'text-blue-600' : 'text-rose-600'}`}>
-                                    {settlement.netAmount >= 0 ? 'Agency Receives' : 'Agency Pays'}
+                                    {settlement.netAmount >= 0 ? 'To Pay' : 'To Receive'}
                                 </p>
                                 <p className={`text-xl font-black ${settlement.netAmount >= 0 ? 'text-blue-700' : 'text-rose-700'}`}>৳{Math.abs(settlement.netAmount).toLocaleString()}</p>
                             </div>
                         </div>
 
                         {/* Guest List Container */}
-                        <div className="bg-white rounded-[1.5rem] border border-slate-200 overflow-hidden shadow-sm">
+                        <div className="bg-white rounded-[1.75rem] border border-slate-200 overflow-hidden shadow-sm">
                             <div className="bg-white p-5 border-b border-slate-100 flex justify-between items-center sticky top-0 z-10">
                                 <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                                    <Users size={14}/> বুকিং তালিকা (Guest List)
+                                    <Users size={14}/> Booking List
                                 </h4>
                                 <button onClick={() => setIsAddingBooking(agency.id)} className="text-violet-700 text-[10px] bg-violet-50 px-3 py-1.5 rounded-lg border border-violet-100 flex items-center font-bold hover:bg-violet-100 transition-all uppercase tracking-wide">
-                                    <UserPlus size={12} className="mr-1.5" /> নতুন গেস্ট
+                                    <UserPlus size={12} className="mr-1.5" /> Add Guest
                                 </button>
                             </div>
                             
@@ -307,29 +305,29 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
                                 <div className="p-6 bg-slate-50 border-b border-slate-100 animate-fade-in">
                                     <div className="grid grid-cols-2 gap-4 mb-4">
                                         <div className="col-span-2">
-                                            <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">গেস্টের নাম</label>
-                                            <input className="w-full border border-slate-200 bg-white p-3 rounded-xl text-sm outline-none font-semibold focus:ring-2 focus:ring-violet-500" placeholder="নাম লিখুন" value={newBooking.name} onChange={e => setNewBooking({...newBooking, name: e.target.value})} />
+                                            <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">Guest Name</label>
+                                            <input className="w-full border border-slate-200 bg-white p-3 rounded-xl text-sm outline-none font-semibold focus:ring-2 focus:ring-violet-500" placeholder="Name" value={newBooking.name} onChange={e => setNewBooking({...newBooking, name: e.target.value})} />
                                         </div>
                                         <div className="col-span-2">
-                                            <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">গেস্ট মোবাইল</label>
-                                            <input className="w-full border border-slate-200 bg-white p-3 rounded-xl text-sm outline-none font-semibold focus:ring-2 focus:ring-violet-500" placeholder="017..." value={newBooking.phone} onChange={e => setNewBooking({...newBooking, phone: e.target.value})} />
+                                            <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">Mobile</label>
+                                            <input className="w-full border border-slate-200 bg-white p-3 rounded-xl text-sm outline-none font-semibold focus:ring-2 focus:ring-violet-500" placeholder="Phone" value={newBooking.phone} onChange={e => setNewBooking({...newBooking, phone: e.target.value})} />
                                         </div>
                                         <div>
-                                            <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">মোট সিট</label>
+                                            <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">Seats</label>
                                             <input type="number" className="w-full border border-slate-200 bg-white p-3 rounded-xl text-sm outline-none font-bold text-center focus:ring-2 focus:ring-violet-500" placeholder="0" value={newBooking.seatCount} onChange={e => setNewBooking({...newBooking, seatCount: e.target.value})} />
                                         </div>
                                         <div>
-                                            <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">জনপ্রতি কালেকশন (Due)</label>
+                                            <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">Collection</label>
                                             <input type="number" className="w-full border border-emerald-200 bg-emerald-50 p-3 rounded-xl text-sm outline-none font-bold text-center text-emerald-700 focus:ring-2 focus:ring-emerald-500" placeholder="0" value={newBooking.unitPrice} onChange={e => setNewBooking({...newBooking, unitPrice: e.target.value})} />
                                         </div>
                                     </div>
                                     <div className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200">
                                         <div className="text-xs font-bold text-slate-500">
-                                            মোট কালেকশন (Due): <span className="text-violet-600 text-sm">৳{((parseInt(newBooking.seatCount)||0) * (parseInt(newBooking.unitPrice)||0)).toLocaleString()}</span>
+                                            Total Due: <span className="text-violet-600 text-sm">৳{((parseInt(newBooking.seatCount)||0) * (parseInt(newBooking.unitPrice)||0)).toLocaleString()}</span>
                                         </div>
                                         <div className="flex gap-2">
-                                            <button onClick={() => setIsAddingBooking(null)} className="px-4 py-2 rounded-lg text-slate-500 text-xs font-bold hover:bg-slate-100">বাতিল</button>
-                                            <button onClick={() => addBookingToAgency(agency.id)} className="bg-violet-600 text-white px-5 py-2 rounded-lg text-xs font-bold shadow-md hover:bg-violet-700">সেভ করুন</button>
+                                            <button onClick={() => setIsAddingBooking(null)} className="px-4 py-2 rounded-lg text-slate-500 text-xs font-bold hover:bg-slate-100">Cancel</button>
+                                            <button onClick={() => addBookingToAgency(agency.id)} className="bg-violet-600 text-white px-5 py-2 rounded-lg text-xs font-bold shadow-md hover:bg-violet-700">Save</button>
                                         </div>
                                     </div>
                                 </div>
@@ -340,7 +338,7 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
                                     <div className="bg-slate-50 p-4 rounded-full mb-3 text-slate-300">
                                         <Users size={24} />
                                     </div>
-                                    <p className="text-xs text-slate-400 italic font-medium">এখনও কোন গেস্ট বুকিং নেই</p>
+                                    <p className="text-xs text-slate-400 italic font-medium">No guests added yet.</p>
                                 </div>
                             ) : (
                                 <div className="divide-y divide-slate-50">
@@ -381,7 +379,7 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
                                                 
                                                 <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
                                                     <div className="text-right">
-                                                        <p className="text-[9px] text-slate-400 font-bold uppercase">Total Due</p>
+                                                        <p className="text-[9px] text-slate-400 font-bold uppercase">Due</p>
                                                         <p className="font-mono font-bold text-emerald-600 text-sm">৳{guest.collection.toLocaleString()}</p>
                                                     </div>
 
