@@ -4,7 +4,7 @@ import { CommonTabProps, PartnerAgency, Guest } from '../types';
 import { db } from '../services/firebase';
 import { doc, updateDoc, Timestamp } from 'firebase/firestore';
 import { calculateAgencySettlement, safeNum } from '../utils/calculations';
-import { Users, Phone, Plus, Trash, ChevronDown, ChevronUp, UserPlus, Briefcase, Calculator, Mail, Star, Edit3, X, Check } from 'lucide-react';
+import { Users, Phone, Plus, Trash, ChevronDown, ChevronUp, UserPlus, Briefcase, Calculator, Mail, Star, Edit3, X, Check, FolderOpen } from 'lucide-react';
 
 const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) => {
   const [selectedTourId, setSelectedTourId] = useState<string>('');
@@ -15,7 +15,6 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
   const [newBooking, setNewBooking] = useState({ name: '', phone: '', seatCount: '', unitPrice: '' });
   const [isAddingBooking, setIsAddingBooking] = useState<string | null>(null);
   
-  // State for granular seat editing
   const [editingGuest, setEditingGuest] = useState<{ agencyId: string, guestId: string } | null>(null);
   const [seatBreakdown, setSeatBreakdown] = useState({ regular: 0, disc1: 0, disc2: 0 });
 
@@ -25,7 +24,6 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
     }
   }, [tours, selectedTourId]);
 
-  // Derive activeTour directly from props to ensure we always have latest data
   const activeTour = tours.find(t => t.id === selectedTourId) || null;
 
   if (user.role !== 'admin') return <div className="h-full flex items-center justify-center text-rose-400 font-bold p-10 bg-rose-50 m-4 rounded-3xl border border-rose-100">শুধুমাত্র এডমিন এক্সেস</div>;
@@ -44,9 +42,7 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
       }
       try {
           const tourRef = doc(db, 'tours', activeTour.id);
-          // Recursively sanitize to ensure clean JS objects are sent
           const cleanAgencies = JSON.parse(JSON.stringify(agencies));
-
           await updateDoc(tourRef, { partnerAgencies: cleanAgencies, updatedAt: Timestamp.now() });
           await refreshTours();
       } catch (e) {
@@ -66,7 +62,6 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
         expenses: []
     };
     
-    // Deep clone existing agencies
     const currentAgencies = activeTour.partnerAgencies ? [...activeTour.partnerAgencies] : [];
     const updatedAgencies = [...currentAgencies, agency];
     
@@ -88,11 +83,10 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
       const seatCount = parseInt(newBooking.seatCount) || 0;
       const unitPrice = parseInt(newBooking.unitPrice) || 0;
 
-      // Ensure guests array exists and clone it
       const currentGuests = agencies[agencyIndex].guests ? [...agencies[agencyIndex].guests] : [];
       
       const newGuest: Guest = {
-          id: `g_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // Robust ID
+          id: `g_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           name: newBooking.name,
           phone: newBooking.phone || '',
           seatCount: seatCount,
@@ -115,7 +109,6 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
   };
 
   const deleteGuest = async (e: React.MouseEvent | undefined, agencyId: string, guestId: string) => {
-      // Critical Stop Propagation
       if (e) {
         e.preventDefault();
         e.stopPropagation();
@@ -124,12 +117,8 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
 
       if(!window.confirm("আপনি কি নিশ্চিত এই গেস্ট ডিলিট করতে চান?")) return;
       
-      if (!activeTour.partnerAgencies) {
-          console.error("No partner agencies data found");
-          return;
-      }
+      if (!activeTour.partnerAgencies) return;
 
-      // Robust Deep Copy Logic to avoid mutation issues
       const agencies = activeTour.partnerAgencies.map(a => ({
           ...a,
           guests: a.guests ? [...a.guests] : []
@@ -138,23 +127,11 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
       const agIdx = agencies.findIndex((a: PartnerAgency) => a.id === agencyId);
       
       if (agIdx !== -1) {
-          const initialLen = agencies[agIdx].guests.length;
-          // Filter out the guest
           agencies[agIdx].guests = agencies[agIdx].guests.filter((g: Guest) => g.id !== guestId);
-          
-          if (agencies[agIdx].guests.length !== initialLen) {
-              console.log(`Deleting guest ${guestId} from agency ${agencyId}`);
-              await updateTourAgencies(agencies);
-          } else {
-             console.warn("Guest not found with ID", guestId);
-             alert("Error: Guest not found or already deleted.");
-          }
-      } else {
-          alert("Error: Agency not found.");
+          await updateTourAgencies(agencies);
       }
   };
 
-  // Setup editing state
   const startEditingSeats = (e: React.MouseEvent, agencyId: string, guest: Guest) => {
       e.stopPropagation();
       setEditingGuest({ agencyId, guestId: guest.id });
@@ -201,47 +178,54 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
 
   return (
     <div className="p-4 space-y-6 animate-fade-in pb-24 lg:pb-10 max-w-6xl mx-auto">
-      <div className="mb-6">
-        <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Select Tour</label>
-        <div className="relative">
-            <select 
-                value={selectedTourId}
-                onChange={(e) => setSelectedTourId(e.target.value)}
-                className="w-full appearance-none bg-white border-2 border-slate-200 text-slate-800 py-4 pl-5 pr-12 rounded-2xl text-lg font-black focus:outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 transition-all shadow-sm"
-            >
-                {tours.map(t => <option key={t.id} value={t.id}>{t.name} ({t.date})</option>)}
-            </select>
-            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={24} strokeWidth={2.5} />
+      {/* Selector */}
+      <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 relative z-20">
+        <div className="p-3 bg-blue-50 rounded-xl text-blue-600">
+            <Users size={20} />
+        </div>
+        <div className="flex-1">
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">এজেন্সি ও বুকিং</label>
+            <div className="relative">
+                <select 
+                    value={selectedTourId}
+                    onChange={(e) => setSelectedTourId(e.target.value)}
+                    className="w-full appearance-none bg-transparent text-slate-800 text-lg font-black focus:outline-none cursor-pointer pr-8"
+                >
+                    {tours.map(t => <option key={t.id} value={t.id}>{t.name} ({t.date})</option>)}
+                </select>
+                <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} strokeWidth={2.5} />
+            </div>
         </div>
       </div>
 
-      <div className="flex justify-between items-center bg-white/80 backdrop-blur p-4 rounded-2xl shadow-sm border border-slate-100">
+      <div className="flex justify-between items-center bg-white/60 backdrop-blur-md p-4 rounded-[1.5rem] shadow-sm border border-slate-100 sticky top-0 z-10">
         <div>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Partner Management</p>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Partner Agencies</p>
+            <h2 className="font-bold text-slate-700 text-sm">Manage Partners</h2>
         </div>
-        <button onClick={() => setShowAddAgency(true)} className="bg-slate-900 text-white px-5 py-2.5 rounded-xl text-sm flex items-center font-bold shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all active:scale-95 uppercase tracking-wide">
-            <Plus size={16} className="mr-2"/> যুক্ত করুন
+        <button onClick={() => setShowAddAgency(true)} className="bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs flex items-center font-bold shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all active:scale-95 uppercase tracking-wide">
+            <Plus size={14} className="mr-2"/> যুক্ত করুন
         </button>
       </div>
 
       {showAddAgency && (
-          <div className="bg-white p-6 rounded-[1.5rem] shadow-xl border border-blue-100 animate-fade-in mb-4 relative overflow-hidden max-w-lg mx-auto">
+          <div className="bg-white p-6 rounded-[2rem] shadow-2xl border border-blue-100 animate-fade-in mb-4 relative overflow-hidden max-w-lg mx-auto z-20">
               <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-500"></div>
-              <h3 className="text-xs font-bold text-blue-600 mb-4 uppercase tracking-widest flex items-center gap-2">
+              <h3 className="text-xs font-bold text-blue-600 mb-6 uppercase tracking-widest flex items-center gap-2">
                   <Briefcase size={14}/> নতুন এজেন্সির তথ্য
               </h3>
               <div className="space-y-4">
                   <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">এজেন্সির নাম</label>
-                      <input placeholder="যেমন: স্কাই ট্রাভেলস" className="w-full border border-slate-200 bg-slate-50 p-3.5 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all font-semibold" value={newAgency.name} onChange={e => setNewAgency({...newAgency, name: e.target.value})} />
+                      <input placeholder="যেমন: স্কাই ট্রাভেলস" className="w-full border border-slate-200 bg-slate-50 p-4 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all font-semibold" value={newAgency.name} onChange={e => setNewAgency({...newAgency, name: e.target.value})} />
                   </div>
                    <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">এজেন্সির ইমেইল (লগইন এর জন্য)</label>
-                      <input type="email" placeholder="agent@gmail.com" className="w-full border border-slate-200 bg-slate-50 p-3.5 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all font-semibold" value={newAgency.email} onChange={e => setNewAgency({...newAgency, email: e.target.value})} />
+                      <input type="email" placeholder="agent@gmail.com" className="w-full border border-slate-200 bg-slate-50 p-4 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all font-semibold" value={newAgency.email} onChange={e => setNewAgency({...newAgency, email: e.target.value})} />
                   </div>
                   <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">মোবাইল নাম্বার</label>
-                      <input placeholder="017..." className="w-full border border-slate-200 bg-slate-50 p-3.5 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all font-semibold" value={newAgency.phone} onChange={e => setNewAgency({...newAgency, phone: e.target.value})} />
+                      <input placeholder="017..." className="w-full border border-slate-200 bg-slate-50 p-4 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all font-semibold" value={newAgency.phone} onChange={e => setNewAgency({...newAgency, phone: e.target.value})} />
                   </div>
               </div>
               <div className="flex justify-end gap-3 mt-6">
@@ -257,117 +241,126 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
             const isExpanded = expandedAgency === agency.id;
             
             return (
-              <div key={agency.id} className={`bg-white rounded-[1.5rem] shadow-sm border overflow-hidden transition-all duration-300 flex flex-col ${isExpanded ? 'border-violet-200 ring-4 ring-violet-50 col-span-1 lg:col-span-2' : 'border-slate-100'}`}>
+              <div key={agency.id} className={`bg-white rounded-[2rem] shadow-sm border overflow-hidden transition-all duration-300 flex flex-col ${isExpanded ? 'border-violet-200 ring-4 ring-violet-50 col-span-1 lg:col-span-2 shadow-xl' : 'border-slate-100 hover:shadow-md'}`}>
                   <div 
                     onClick={() => setExpandedAgency(isExpanded ? null : agency.id)}
-                    className={`p-5 flex justify-between items-center cursor-pointer hover:bg-slate-50 transition-colors ${isExpanded ? 'bg-slate-50 border-b border-slate-100' : ''}`}
+                    className={`p-6 flex justify-between items-center cursor-pointer transition-colors ${isExpanded ? 'bg-slate-50/50 border-b border-slate-100' : 'hover:bg-slate-50/30'}`}
                   >
                       <div className="flex items-center gap-4">
-                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-violet-600 shadow-sm transition-colors ${isExpanded ? 'bg-white shadow-md' : 'bg-violet-50'}`}>
-                              <Users size={20} />
+                          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${isExpanded ? 'bg-violet-600 text-white shadow-lg shadow-violet-200' : 'bg-slate-100 text-slate-400'}`}>
+                              {isExpanded ? <FolderOpen size={24} /> : <Users size={24} />}
                           </div>
                           <div>
-                              <h3 className="font-bold text-slate-800 text-lg leading-tight">{agency.name}</h3>
-                              <p className="text-[11px] text-slate-500 font-medium flex items-center mt-1"><Mail size={10} className="mr-1"/> {agency.email || 'No Email'}</p>
+                              <h3 className={`font-black text-lg leading-tight ${isExpanded ? 'text-violet-900' : 'text-slate-800'}`}>{agency.name}</h3>
+                              <p className="text-[11px] text-slate-500 font-bold flex items-center mt-1"><Mail size={10} className="mr-1"/> {agency.email || 'No Email'}</p>
                           </div>
                       </div>
                       <div className="flex items-center gap-4">
-                          <div className="text-right hidden sm:block bg-white px-3 py-1.5 rounded-xl border border-slate-100 shadow-sm">
-                              <p className="text-[9px] text-slate-400 uppercase font-bold">নিট সেটেলমেন্ট</p>
+                          <div className="text-right hidden sm:block bg-white px-4 py-2 rounded-xl border border-slate-100 shadow-sm">
+                              <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Net Settlement</p>
                               <p className={`text-sm font-black ${settlement.netAmount >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                                   {settlement.netAmount >= 0 ? '+' : ''}{settlement.netAmount} ৳
                               </p>
                           </div>
-                          {isExpanded ? <ChevronUp size={20} className="text-slate-400"/> : <ChevronDown size={20} className="text-slate-400"/>}
+                          <div className={`p-2 rounded-full transition-transform duration-300 ${isExpanded ? 'rotate-180 bg-violet-100 text-violet-600' : 'bg-slate-50 text-slate-400'}`}>
+                            <ChevronDown size={20}/>
+                          </div>
                       </div>
                   </div>
 
                   {isExpanded && (
-                    <div className="p-5 animate-fade-in">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
-                                <p className="text-[9px] text-slate-400 font-bold uppercase">গেস্ট / সিট</p>
-                                <p className="text-lg font-black text-slate-800">{settlement.totalSeats}</p>
+                    <div className="p-6 animate-fade-in bg-slate-50/30">
+                        {/* Summary Grid */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                            <div className="bg-white p-4 rounded-2xl border border-slate-100 text-center shadow-sm">
+                                <p className="text-[9px] text-slate-400 font-bold uppercase mb-1">Total Guests</p>
+                                <p className="text-2xl font-black text-slate-800">{settlement.totalSeats}</p>
                             </div>
-                            <div className="bg-orange-50 p-3 rounded-xl border border-orange-100 text-center">
-                                <p className="text-[9px] text-orange-600 font-bold uppercase flex justify-center items-center gap-1">
-                                    <Calculator size={10}/> Buy Rate (Regular)
+                            <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100 text-center">
+                                <p className="text-[9px] text-orange-600 font-bold uppercase mb-1">Buy Rate (Reg)</p>
+                                <p className="text-xl font-black text-orange-700">৳{settlement.rates.regular.toLocaleString()}</p>
+                            </div>
+                            <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 text-center">
+                                <p className="text-[9px] text-emerald-600 font-bold uppercase mb-1">Host Due</p>
+                                <p className="text-xl font-black text-emerald-700">৳{settlement.totalCollection.toLocaleString()}</p>
+                            </div>
+                             <div className={`p-4 rounded-2xl border text-center ${settlement.netAmount >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-rose-50 border-rose-100'}`}>
+                                <p className={`text-[9px] font-bold uppercase mb-1 ${settlement.netAmount >= 0 ? 'text-blue-600' : 'text-rose-600'}`}>
+                                    {settlement.netAmount >= 0 ? 'Agency Receives' : 'Agency Pays'}
                                 </p>
-                                <p className="text-lg font-black text-orange-700">৳{settlement.rates.regular.toLocaleString()}</p>
-                            </div>
-                            <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100 text-center">
-                                <p className="text-[9px] text-emerald-600 font-bold uppercase">Host Collected (Due)</p>
-                                <p className="text-lg font-black text-emerald-700">৳{settlement.totalCollection.toLocaleString()}</p>
-                            </div>
-                             <div className={`p-3 rounded-xl border text-center ${settlement.netAmount >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-rose-50 border-rose-100'}`}>
-                                <p className={`text-[9px] font-bold uppercase ${settlement.netAmount >= 0 ? 'text-blue-600' : 'text-rose-600'}`}>
-                                    {settlement.netAmount >= 0 ? 'এজেন্সি পাবে' : 'এজেন্সি দিবে'}
-                                </p>
-                                <p className={`text-lg font-black ${settlement.netAmount >= 0 ? 'text-blue-700' : 'text-rose-700'}`}>৳{Math.abs(settlement.netAmount).toLocaleString()}</p>
+                                <p className={`text-xl font-black ${settlement.netAmount >= 0 ? 'text-blue-700' : 'text-rose-700'}`}>৳{Math.abs(settlement.netAmount).toLocaleString()}</p>
                             </div>
                         </div>
 
-                        <div className="bg-white rounded-2xl border border-violet-100 overflow-hidden">
-                            <div className="bg-violet-50/50 p-4 border-b border-violet-100 flex justify-between items-center">
-                                <h4 className="text-[10px] font-bold text-violet-700 uppercase tracking-widest">বুকিং তালিকা (Guest List)</h4>
-                                <button onClick={() => setIsAddingBooking(agency.id)} className="text-violet-700 text-[10px] bg-white px-3 py-1.5 rounded-lg border border-violet-200 flex items-center font-bold hover:bg-violet-50 shadow-sm transition-all uppercase tracking-wide">
+                        {/* Guest List Container */}
+                        <div className="bg-white rounded-[1.5rem] border border-slate-200 overflow-hidden shadow-sm">
+                            <div className="bg-white p-5 border-b border-slate-100 flex justify-between items-center sticky top-0 z-10">
+                                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                    <Users size={14}/> বুকিং তালিকা (Guest List)
+                                </h4>
+                                <button onClick={() => setIsAddingBooking(agency.id)} className="text-violet-700 text-[10px] bg-violet-50 px-3 py-1.5 rounded-lg border border-violet-100 flex items-center font-bold hover:bg-violet-100 transition-all uppercase tracking-wide">
                                     <UserPlus size={12} className="mr-1.5" /> নতুন গেস্ট
                                 </button>
                             </div>
                             
                             {isAddingBooking === agency.id && (
-                                <div className="p-4 bg-violet-50 border-b border-violet-100 animate-fade-in">
-                                    <div className="grid grid-cols-2 gap-3 mb-3">
+                                <div className="p-6 bg-slate-50 border-b border-slate-100 animate-fade-in">
+                                    <div className="grid grid-cols-2 gap-4 mb-4">
                                         <div className="col-span-2">
                                             <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">গেস্টের নাম</label>
-                                            <input className="w-full border border-slate-200 bg-white p-2.5 rounded-xl text-sm outline-none font-semibold" placeholder="নাম" value={newBooking.name} onChange={e => setNewBooking({...newBooking, name: e.target.value})} />
+                                            <input className="w-full border border-slate-200 bg-white p-3 rounded-xl text-sm outline-none font-semibold focus:ring-2 focus:ring-violet-500" placeholder="নাম লিখুন" value={newBooking.name} onChange={e => setNewBooking({...newBooking, name: e.target.value})} />
                                         </div>
                                         <div className="col-span-2">
                                             <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">গেস্ট মোবাইল</label>
-                                            <input className="w-full border border-slate-200 bg-white p-2.5 rounded-xl text-sm outline-none font-semibold" placeholder="017..." value={newBooking.phone} onChange={e => setNewBooking({...newBooking, phone: e.target.value})} />
+                                            <input className="w-full border border-slate-200 bg-white p-3 rounded-xl text-sm outline-none font-semibold focus:ring-2 focus:ring-violet-500" placeholder="017..." value={newBooking.phone} onChange={e => setNewBooking({...newBooking, phone: e.target.value})} />
                                         </div>
                                         <div>
                                             <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">মোট সিট</label>
-                                            <input type="number" className="w-full border border-slate-200 bg-white p-2.5 rounded-xl text-sm outline-none font-bold text-center" placeholder="0" value={newBooking.seatCount} onChange={e => setNewBooking({...newBooking, seatCount: e.target.value})} />
+                                            <input type="number" className="w-full border border-slate-200 bg-white p-3 rounded-xl text-sm outline-none font-bold text-center focus:ring-2 focus:ring-violet-500" placeholder="0" value={newBooking.seatCount} onChange={e => setNewBooking({...newBooking, seatCount: e.target.value})} />
                                         </div>
                                         <div>
                                             <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">জনপ্রতি কালেকশন (Due)</label>
-                                            <input type="number" className="w-full border border-emerald-200 bg-emerald-50 p-2.5 rounded-xl text-sm outline-none font-bold text-center text-emerald-700" placeholder="0" value={newBooking.unitPrice} onChange={e => setNewBooking({...newBooking, unitPrice: e.target.value})} />
+                                            <input type="number" className="w-full border border-emerald-200 bg-emerald-50 p-3 rounded-xl text-sm outline-none font-bold text-center text-emerald-700 focus:ring-2 focus:ring-emerald-500" placeholder="0" value={newBooking.unitPrice} onChange={e => setNewBooking({...newBooking, unitPrice: e.target.value})} />
                                         </div>
                                     </div>
-                                    <div className="flex justify-between items-center">
+                                    <div className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200">
                                         <div className="text-xs font-bold text-slate-500">
-                                            মোট কালেকশন (Due): <span className="text-violet-600">৳{((parseInt(newBooking.seatCount)||0) * (parseInt(newBooking.unitPrice)||0)).toLocaleString()}</span>
+                                            মোট কালেকশন (Due): <span className="text-violet-600 text-sm">৳{((parseInt(newBooking.seatCount)||0) * (parseInt(newBooking.unitPrice)||0)).toLocaleString()}</span>
                                         </div>
                                         <div className="flex gap-2">
-                                            <button onClick={() => setIsAddingBooking(null)} className="px-3 py-1.5 rounded-lg text-slate-400 text-xs font-bold hover:bg-slate-100">বাতিল</button>
-                                            <button onClick={() => addBookingToAgency(agency.id)} className="bg-violet-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md hover:bg-violet-700">সেভ করুন</button>
+                                            <button onClick={() => setIsAddingBooking(null)} className="px-4 py-2 rounded-lg text-slate-500 text-xs font-bold hover:bg-slate-100">বাতিল</button>
+                                            <button onClick={() => addBookingToAgency(agency.id)} className="bg-violet-600 text-white px-5 py-2 rounded-lg text-xs font-bold shadow-md hover:bg-violet-700">সেভ করুন</button>
                                         </div>
                                     </div>
                                 </div>
                             )}
 
                             {!agency.guests || agency.guests.length === 0 ? (
-                                <p className="text-center text-xs text-slate-400 py-8 italic font-medium">এখনও কোন গেস্ট বুকিং নেই</p>
+                                <div className="text-center py-12 flex flex-col items-center justify-center">
+                                    <div className="bg-slate-50 p-4 rounded-full mb-3 text-slate-300">
+                                        <Users size={24} />
+                                    </div>
+                                    <p className="text-xs text-slate-400 italic font-medium">এখনও কোন গেস্ট বুকিং নেই</p>
+                                </div>
                             ) : (
                                 <div className="divide-y divide-slate-50">
-                                    {agency.guests.map(guest => {
+                                    {agency.guests.map((guest, index) => {
                                         const isEditing = editingGuest?.agencyId === agency.id && editingGuest?.guestId === guest.id;
                                         const breakdownSum = safeNum(seatBreakdown.regular) + safeNum(seatBreakdown.disc1) + safeNum(seatBreakdown.disc2);
                                         const isValid = breakdownSum === safeNum(guest.seatCount);
 
                                         return (
-                                        <div key={guest.id} className="p-4 flex flex-col hover:bg-slate-50 transition-colors group">
+                                        <div key={guest.id} className={`p-4 hover:bg-slate-50 transition-colors group ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
                                             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 w-full">
                                                 <div className="flex-1">
-                                                    <p className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                                                        {guest.name}
-                                                        {/* Show badges for current breakdown if not editing */}
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="font-bold text-slate-800 text-sm">{guest.name}</p>
+                                                        {/* Badges */}
                                                         {!isEditing && guest.paxBreakdown ? (
-                                                             <div className="flex gap-1 ml-2">
-                                                                 {guest.paxBreakdown.regular > 0 && <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 rounded border border-slate-200">R: {guest.paxBreakdown.regular}</span>}
-                                                                 {guest.paxBreakdown.disc1 > 0 && <span className="text-[9px] bg-amber-50 text-amber-600 px-1.5 rounded border border-amber-200">D1: {guest.paxBreakdown.disc1}</span>}
-                                                                 {guest.paxBreakdown.disc2 > 0 && <span className="text-[9px] bg-orange-50 text-orange-600 px-1.5 rounded border border-orange-200">D2: {guest.paxBreakdown.disc2}</span>}
+                                                             <div className="flex gap-1">
+                                                                 {guest.paxBreakdown.regular > 0 && <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 rounded border border-slate-200 font-bold">R:{guest.paxBreakdown.regular}</span>}
+                                                                 {guest.paxBreakdown.disc1 > 0 && <span className="text-[9px] bg-amber-50 text-amber-600 px-1.5 rounded border border-amber-200 font-bold">D1:{guest.paxBreakdown.disc1}</span>}
+                                                                 {guest.paxBreakdown.disc2 > 0 && <span className="text-[9px] bg-orange-50 text-orange-600 px-1.5 rounded border border-orange-200 font-bold">D2:{guest.paxBreakdown.disc2}</span>}
                                                              </div>
                                                         ) : (
                                                             !isEditing && guest.seatType && guest.seatType !== 'regular' && (
@@ -376,84 +369,84 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
                                                                 </span>
                                                             )
                                                         )}
-                                                    </p>
-                                                    <div className="flex items-center gap-2 mt-1">
-                                                        <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-bold border border-slate-200 flex items-center gap-1"><Phone size={8}/> {guest.phone || 'N/A'}</span>
                                                     </div>
-                                                    <div className="flex items-center gap-2 mt-1">
-                                                        <span className="text-[10px] bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded font-bold border border-violet-100">{guest.seatCount || 1} সিট</span>
-                                                        <span className="text-[10px] text-slate-400">× ৳{guest.unitPrice || 0} (Due/Head)</span>
+                                                    
+                                                    <div className="flex items-center gap-3 mt-1.5">
+                                                        <span className="text-[10px] text-slate-400 font-medium flex items-center gap-1"><Phone size={10}/> {guest.phone || 'N/A'}</span>
+                                                        <div className="w-1 h-1 rounded-full bg-slate-200"></div>
+                                                        <span className="text-[10px] text-slate-500 font-bold">{guest.seatCount || 1} Seats</span>
+                                                        <span className="text-[10px] text-slate-400">@ ৳{guest.unitPrice || 0}</span>
                                                     </div>
                                                 </div>
                                                 
-                                                <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
-                                                    <div className="text-right mr-2">
-                                                        <p className="text-[9px] text-slate-400 font-bold">Total Due</p>
-                                                        <p className="font-mono font-bold text-emerald-600">৳{guest.collection.toLocaleString()}</p>
+                                                <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+                                                    <div className="text-right">
+                                                        <p className="text-[9px] text-slate-400 font-bold uppercase">Total Due</p>
+                                                        <p className="font-mono font-bold text-emerald-600 text-sm">৳{guest.collection.toLocaleString()}</p>
                                                     </div>
 
-                                                    {/* Edit Button */}
-                                                    {!isEditing && (
-                                                        <button 
-                                                            type="button"
-                                                            onClick={(e) => startEditingSeats(e, agency.id, guest)}
-                                                            className="p-2 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all"
-                                                            title="Edit Seats"
-                                                        >
-                                                            <Edit3 size={14} />
-                                                        </button>
-                                                    )}
-                                                    
-                                                    {/* Delete Button */}
-                                                    {!isEditing && (
-                                                        <button 
-                                                            type="button"
-                                                            onClick={(e) => deleteGuest(e, agency.id, guest.id)}
-                                                            className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
-                                                            title="Delete Guest"
-                                                        >
-                                                            <Trash size={14} />
-                                                        </button>
-                                                    )}
+                                                    <div className="flex items-center gap-1">
+                                                        {!isEditing && (
+                                                            <>
+                                                                <button 
+                                                                    type="button"
+                                                                    onClick={(e) => startEditingSeats(e, agency.id, guest)}
+                                                                    className="p-2 text-slate-300 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all"
+                                                                    title="Edit Seats"
+                                                                >
+                                                                    <Edit3 size={16} />
+                                                                </button>
+                                                                <button 
+                                                                    type="button"
+                                                                    onClick={(e) => deleteGuest(e, agency.id, guest.id)}
+                                                                    className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                                                                    title="Delete Guest"
+                                                                >
+                                                                    <Trash size={16} />
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
 
                                             {/* Granular Seat Editor */}
                                             {isEditing && (
-                                                <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-xl animate-fade-in">
-                                                    <p className="text-[10px] font-bold text-slate-500 uppercase mb-2 flex justify-between">
-                                                        <span>Seat Breakdown (Total: {guest.seatCount})</span>
+                                                <div className="mt-4 p-4 bg-white border border-slate-200 rounded-xl shadow-lg relative z-20 animate-fade-in">
+                                                    <div className="absolute -top-2 right-12 w-4 h-4 bg-white border-t border-l border-slate-200 transform rotate-45"></div>
+                                                    <p className="text-[10px] font-bold text-slate-500 uppercase mb-3 flex justify-between border-b border-slate-100 pb-2">
+                                                        <span>Seat Breakdown (Total Required: {guest.seatCount})</span>
                                                         <span className={isValid ? "text-emerald-500" : "text-rose-500"}>
-                                                            Current: {breakdownSum}
+                                                            Assigned: {breakdownSum}
                                                         </span>
                                                     </p>
-                                                    <div className="grid grid-cols-3 gap-2">
+                                                    <div className="grid grid-cols-3 gap-3">
                                                         <div>
-                                                            <label className="text-[9px] font-bold text-slate-400 block mb-1">Regular</label>
+                                                            <label className="text-[9px] font-bold text-slate-400 block mb-1 uppercase">Regular</label>
                                                             <input type="number" min="0" value={seatBreakdown.regular} onChange={(e) => setSeatBreakdown({...seatBreakdown, regular: safeNum(e.target.value)})} 
-                                                                className="w-full p-2 border border-slate-200 rounded-lg text-xs font-bold text-center outline-none focus:border-violet-400" />
+                                                                className="w-full p-2.5 border border-slate-200 rounded-lg text-sm font-bold text-center outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200" />
                                                         </div>
                                                         <div>
-                                                            <label className="text-[9px] font-bold text-slate-400 block mb-1">Disc 1</label>
+                                                            <label className="text-[9px] font-bold text-slate-400 block mb-1 uppercase">Disc 1</label>
                                                             <input type="number" min="0" value={seatBreakdown.disc1} onChange={(e) => setSeatBreakdown({...seatBreakdown, disc1: safeNum(e.target.value)})} 
-                                                                className="w-full p-2 border border-slate-200 rounded-lg text-xs font-bold text-center outline-none focus:border-violet-400" />
+                                                                className="w-full p-2.5 border border-slate-200 rounded-lg text-sm font-bold text-center outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200" />
                                                         </div>
                                                         <div>
-                                                            <label className="text-[9px] font-bold text-slate-400 block mb-1">Disc 2</label>
+                                                            <label className="text-[9px] font-bold text-slate-400 block mb-1 uppercase">Disc 2</label>
                                                             <input type="number" min="0" value={seatBreakdown.disc2} onChange={(e) => setSeatBreakdown({...seatBreakdown, disc2: safeNum(e.target.value)})} 
-                                                                className="w-full p-2 border border-slate-200 rounded-lg text-xs font-bold text-center outline-none focus:border-violet-400" />
+                                                                className="w-full p-2.5 border border-slate-200 rounded-lg text-sm font-bold text-center outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200" />
                                                         </div>
                                                     </div>
-                                                    <div className="flex justify-end gap-2 mt-3">
-                                                        <button onClick={() => setEditingGuest(null)} className="p-2 text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-100">
-                                                            <X size={14} />
+                                                    <div className="flex justify-end gap-2 mt-4">
+                                                        <button onClick={() => setEditingGuest(null)} className="px-3 py-2 text-slate-500 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 text-xs font-bold">
+                                                            Cancel
                                                         </button>
                                                         <button 
                                                             disabled={!isValid}
                                                             onClick={() => saveSeatBreakdown(guest.seatCount)} 
-                                                            className={`p-2 text-white rounded-lg flex items-center gap-1 text-xs font-bold shadow-sm ${isValid ? 'bg-violet-600 hover:bg-violet-700' : 'bg-slate-300 cursor-not-allowed'}`}
+                                                            className={`px-4 py-2 text-white rounded-lg flex items-center gap-1 text-xs font-bold shadow-sm transition-all ${isValid ? 'bg-violet-600 hover:bg-violet-700' : 'bg-slate-300 cursor-not-allowed'}`}
                                                         >
-                                                            <Check size={14} /> Update
+                                                            <Check size={14} /> Update Breakdown
                                                         </button>
                                                     </div>
                                                 </div>

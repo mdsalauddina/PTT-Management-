@@ -1,10 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, Guest } from '../types';
-import { CheckCircle, AlertTriangle, TrendingUp, Users, DollarSign, Wallet, ChevronDown, Activity } from 'lucide-react';
+import { CheckCircle, AlertTriangle, TrendingUp, Users, DollarSign, Wallet, ChevronDown, Activity, ArrowRight, PieChart } from 'lucide-react';
 
 const FinalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
-  // 1. ALL HOOKS MUST BE AT THE TOP LEVEL
   const [selectedTourId, setSelectedTourId] = useState<string>('');
 
   useEffect(() => {
@@ -13,7 +12,6 @@ const FinalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
     }
   }, [tours, selectedTourId]);
 
-  // 2. Conditional Logic (After hooks)
   const activeTour = tours.find(t => t.id === selectedTourId) || null;
 
   if (user.role !== 'admin') return null;
@@ -50,83 +48,103 @@ const FinalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
 
   return (
     <div className="p-4 space-y-6 animate-fade-in pb-24 lg:pb-10 max-w-4xl mx-auto">
-      {/* Improved Selector */}
-      <div className="mb-6">
-        <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Select Tour</label>
-        <div className="relative">
-            <select 
-                value={selectedTourId}
-                onChange={(e) => setSelectedTourId(e.target.value)}
-                className="w-full appearance-none bg-white border-2 border-slate-200 text-slate-800 py-4 pl-5 pr-12 rounded-2xl text-lg font-black focus:outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 transition-all shadow-sm"
-            >
-                {tours.map(t => <option key={t.id} value={t.id}>{t.name} ({t.date})</option>)}
-            </select>
-            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={24} strokeWidth={2.5} />
+      {/* Selector */}
+      <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 relative z-20">
+        <div className="p-3 bg-teal-50 rounded-xl text-teal-600">
+            <CheckCircle size={20} />
+        </div>
+        <div className="flex-1">
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">ফাইনাল রিপোর্ট</label>
+            <div className="relative">
+                <select 
+                    value={selectedTourId}
+                    onChange={(e) => setSelectedTourId(e.target.value)}
+                    className="w-full appearance-none bg-transparent text-slate-800 text-lg font-black focus:outline-none cursor-pointer pr-8"
+                >
+                    {tours.map(t => <option key={t.id} value={t.id}>{t.name} ({t.date})</option>)}
+                </select>
+                <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} strokeWidth={2.5} />
+            </div>
         </div>
       </div>
 
-      <div className={`relative overflow-hidden rounded-[2rem] p-8 text-white shadow-2xl ${netOperation >= 0 ? 'bg-gradient-to-br from-emerald-600 to-teal-800' : 'bg-gradient-to-br from-rose-500 to-orange-700'}`}>
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-20 -mt-20 blur-3xl"></div>
+      {/* Hero Card */}
+      <div className={`relative overflow-hidden rounded-[2.5rem] p-10 text-white shadow-2xl transition-all duration-500 ${netOperation >= 0 ? 'bg-gradient-to-br from-emerald-600 to-teal-800 shadow-emerald-500/30' : 'bg-gradient-to-br from-rose-600 to-orange-800 shadow-rose-500/30'}`}>
+        {/* Background Mesh */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-white opacity-10 rounded-full -mr-20 -mt-20 blur-3xl mix-blend-overlay"></div>
+        <div className="absolute bottom-0 left-0 w-72 h-72 bg-black opacity-10 rounded-full -ml-20 -mb-20 blur-3xl mix-blend-overlay"></div>
+        
         <div className="relative z-10">
-            <h2 className="text-2xl font-black tracking-tight mb-1">Net Operation Result</h2>
-            <p className="opacity-80 text-xs font-bold tracking-widest uppercase">{activeTour.name} • {activeTour.date}</p>
+            <div className="flex justify-between items-start">
+                <div>
+                    <h2 className="text-3xl font-black tracking-tighter mb-1">Net Operation Result</h2>
+                    <p className="opacity-80 text-xs font-bold tracking-widest uppercase flex items-center gap-2">
+                         {activeTour.name} <span className="w-1 h-1 bg-white rounded-full"></span> {activeTour.date}
+                    </p>
+                </div>
+                <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-md border border-white/10">
+                    <Activity size={28} className="text-white" />
+                </div>
+            </div>
             
-            <div className="mt-10">
-                <p className="text-white/70 text-[10px] uppercase font-bold tracking-widest mb-1 flex items-center gap-2">
-                    <Activity size={12}/> মোট লাভ / (লোকসান)
+            <div className="mt-12">
+                <p className="text-white/70 text-[10px] uppercase font-bold tracking-widest mb-2 flex items-center gap-2">
+                    মোট লাভ / (লোকসান)
                 </p>
                 <div className="flex items-baseline gap-2">
-                    <p className="text-5xl font-black tracking-tighter drop-shadow-sm">৳ {Math.abs(netOperation).toLocaleString()}</p>
+                    <p className="text-6xl font-black tracking-tighter drop-shadow-sm">৳ {Math.abs(netOperation).toLocaleString()}</p>
                 </div>
-                <div className={`inline-flex items-center px-4 py-2 rounded-xl text-xs mt-5 font-bold shadow-lg backdrop-blur-md border ${netOperation >= 0 ? 'bg-emerald-400/20 text-emerald-50 border-emerald-400/30' : 'bg-rose-900/20 text-rose-50 border-rose-400/30'}`}>
-                    {netOperation >= 0 ? <CheckCircle size={14} className="mr-2"/> : <AlertTriangle size={14} className="mr-2"/>}
-                    {netOperation >= 0 ? 'Profitable' : 'Loss Making'}
+                <div className={`inline-flex items-center px-5 py-2.5 rounded-2xl text-xs mt-6 font-bold shadow-lg backdrop-blur-md border transition-all hover:scale-105 ${netOperation >= 0 ? 'bg-emerald-400/20 text-emerald-50 border-emerald-400/30' : 'bg-rose-900/20 text-rose-50 border-rose-400/30'}`}>
+                    {netOperation >= 0 ? <CheckCircle size={16} className="mr-2"/> : <AlertTriangle size={16} className="mr-2"/>}
+                    {netOperation >= 0 ? 'Profitable Event' : 'Loss Making Event'}
                 </div>
             </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white p-6 rounded-[1.5rem] shadow-sm border border-slate-100 flex flex-col items-center justify-center text-center">
-             <div className="bg-blue-50 p-3.5 rounded-2xl text-blue-600 mb-3"><Users size={24}/></div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+          <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col items-center justify-center text-center group hover:shadow-md transition-all">
+             <div className="bg-blue-50 p-4 rounded-2xl text-blue-600 mb-4 group-hover:scale-110 transition-transform"><Users size={24}/></div>
              <p className="text-slate-400 text-[10px] uppercase font-bold tracking-widest">মোট গেস্ট</p>
-             <p className="text-2xl font-black text-slate-800 mt-1">{totalGuests}</p>
+             <p className="text-3xl font-black text-slate-800 mt-2">{totalGuests}</p>
           </div>
-          <div className="bg-white p-6 rounded-[1.5rem] shadow-sm border border-slate-100 flex flex-col items-center justify-center text-center">
-             <div className="bg-purple-50 p-3.5 rounded-2xl text-purple-600 mb-3"><TrendingUp size={24}/></div>
+          <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col items-center justify-center text-center group hover:shadow-md transition-all">
+             <div className="bg-purple-50 p-4 rounded-2xl text-purple-600 mb-4 group-hover:scale-110 transition-transform"><PieChart size={24}/></div>
              <p className="text-slate-400 text-[10px] uppercase font-bold tracking-widest">অকুপেন্সি</p>
-             <p className="text-2xl font-black text-slate-800 mt-1">
-               {activeTour.busConfig?.totalSeats ? ((totalGuests/activeTour.busConfig.totalSeats)*100).toFixed(0) : 0}%
+             <p className="text-3xl font-black text-slate-800 mt-2">
+               {activeTour.busConfig?.totalSeats ? ((totalGuests/activeTour.busConfig.totalSeats)*100).toFixed(0) : 0}<span className="text-lg text-slate-400 ml-1">%</span>
              </p>
           </div>
-          <div className="bg-white p-6 rounded-[1.5rem] shadow-sm border border-slate-100 flex flex-col items-center justify-center text-center md:col-span-2">
-             <div className="bg-emerald-50 p-3.5 rounded-2xl text-emerald-600 mb-3"><DollarSign size={24}/></div>
+          <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col items-center justify-center text-center md:col-span-2 group hover:shadow-md transition-all">
+             <div className="bg-emerald-50 p-4 rounded-2xl text-emerald-600 mb-4 group-hover:scale-110 transition-transform"><DollarSign size={24}/></div>
              <p className="text-slate-400 text-[10px] uppercase font-bold tracking-widest">মোট কালেকশন (Revenue)</p>
-             <p className="text-2xl font-black text-slate-800 mt-1">৳ {totalCollection.toLocaleString()}</p>
+             <p className="text-4xl font-black text-slate-800 mt-2">৳ {totalCollection.toLocaleString()}</p>
           </div>
       </div>
 
-      <div className="bg-white rounded-[1.5rem] shadow-sm border border-slate-200 overflow-hidden">
-          <div className="p-6 border-b border-slate-50 bg-slate-50/50">
-              <h3 className="font-bold text-slate-700 flex items-center text-xs uppercase tracking-widest"><DollarSign size={14} className="mr-2 text-violet-500"/> বিস্তারিত খরচ</h3>
+      <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
+          <div className="p-6 border-b border-slate-50 bg-slate-50/50 flex justify-between items-center">
+              <h3 className="font-bold text-slate-700 flex items-center text-xs uppercase tracking-widest"><Wallet size={16} className="mr-2 text-violet-500"/> বিস্তারিত খরচ</h3>
           </div>
           <div className="p-6 space-y-4 text-sm">
-              <div className="flex justify-between items-center text-slate-500 text-xs">
-                  <span>বাস ভাড়া (Fixed)</span>
-                  <span className="font-mono">৳ {Number(activeTour.busConfig?.totalRent || 0).toLocaleString()}</span>
+              <div className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors">
+                  <span className="text-slate-500 font-bold text-xs uppercase">বাস ভাড়া (Fixed)</span>
+                  <span className="font-mono font-bold text-slate-700">৳ {Number(activeTour.busConfig?.totalRent || 0).toLocaleString()}</span>
               </div>
-              <div className="flex justify-between items-center text-slate-500 text-xs">
-                  <span>হোস্ট ফি (Salary)</span>
-                  <span className="font-mono">৳ {Number(activeTour.costs?.hostFee || 0).toLocaleString()}</span>
+              <div className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors">
+                  <span className="text-slate-500 font-bold text-xs uppercase">হোস্ট ফি (Salary)</span>
+                  <span className="font-mono font-bold text-slate-700">৳ {Number(activeTour.costs?.hostFee || 0).toLocaleString()}</span>
               </div>
-              <div className="flex justify-between items-center text-slate-500 text-xs">
-                  <span>খাবার ও লোকাল ট্রান্সপোর্ট (Variable)</span>
-                  <span className="font-mono">৳ {totalDailyExpenses.toLocaleString()}</span>
+              <div className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors">
+                  <span className="text-slate-500 font-bold text-xs uppercase">খাবার ও লোকাল ট্রান্সপোর্ট (Variable)</span>
+                  <span className="font-mono font-bold text-slate-700">৳ {totalDailyExpenses.toLocaleString()}</span>
               </div>
               <div className="h-px bg-slate-100 my-2"></div>
-              <div className="flex justify-between items-center pt-2">
-                  <span className="text-slate-800 font-bold text-xs uppercase">মোট খরচ</span>
-                  <span className="font-black text-rose-500 text-lg font-mono">- ৳ {totalFixedCosts.toLocaleString()}</span>
+              <div className="flex justify-between items-center bg-rose-50 p-4 rounded-xl border border-rose-100">
+                  <span className="text-rose-700 font-bold text-xs uppercase tracking-widest flex items-center gap-2">
+                     <TrendingUp size={16}/> মোট খরচ
+                  </span>
+                  <span className="font-black text-rose-600 text-xl font-mono">- ৳ {totalFixedCosts.toLocaleString()}</span>
               </div>
           </div>
       </div>
