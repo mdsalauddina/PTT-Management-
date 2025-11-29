@@ -1,11 +1,9 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { auth, db } from './services/firebase';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, collection, query, orderBy, getDocs } from 'firebase/firestore';
 import { UserProfile, TabId, Tour } from './types';
-import { LogOut, LayoutGrid, ShieldCheck, Sparkles, FolderPlus, BarChart3, UserCircle, Users, CheckSquare, Lock, List } from 'lucide-react';
+import { LogOut, LayoutGrid, FolderPlus, BarChart3, UserCircle, Users, CheckSquare, Lock, List } from 'lucide-react';
 
 // Components
 import EntryTab from './components/EntryTab';
@@ -115,8 +113,10 @@ const App = () => {
 
       // Strict filtering for Host
       if (user.role === 'host') {
+          // Explicitly convert both IDs to string and trim to avoid mismatches
+          const currentUserId = String(user.uid).trim();
           fetchedTours = fetchedTours.filter(t => 
-              t.assignedHostId === user.uid
+              t.assignedHostId && String(t.assignedHostId).trim() === currentUserId
           );
       } else if (user.role === 'agency') {
           const todayStr = getLocalDateString();
@@ -194,7 +194,7 @@ const App = () => {
     { id: 'analysis', label: 'এনালাইসিস', icon: BarChart3, role: ['admin'] },
     { id: 'personal', label: 'পার্সোনাল', icon: UserCircle, role: ['admin', 'host'] },
     { id: 'share', label: 'পার্টনার', icon: Users, role: ['admin', 'host'] },
-    { id: 'guest_list', label: 'গেস্ট লিস্ট', icon: List, role: ['host', 'admin'] }, // Host specific
+    { id: 'guest_list', label: 'গেস্ট লিস্ট', icon: List, role: ['host', 'admin'] },
     { id: 'final', label: 'ফাইনাল', icon: CheckSquare, role: ['admin'] },
   ];
   
@@ -240,7 +240,7 @@ const App = () => {
                         <div className="w-8 h-8 rounded-full bg-white border border-slate-100 flex items-center justify-center text-slate-400 text-[10px] font-bold">
                             {user.email.substring(0,2)}
                         </div>
-                        <div className="overflow-hidden">
+                        <div className="overflow-hidden min-w-0">
                             <p className="font-bold text-slate-800 text-xs truncate">{user.email.split('@')[0]}</p>
                             <p className="text-[9px] font-bold text-slate-400 uppercase">{user.role}</p>
                         </div>
@@ -269,8 +269,8 @@ const App = () => {
                 </div>
             </header>
 
-            {/* Main Content */}
-            <main className="flex-1 w-full max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-8">
+            {/* Main Content with padding for bottom nav */}
+            <main className="flex-1 w-full max-w-6xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 lg:py-8 pb-24 lg:pb-8">
                 {renderContent()}
             </main>
         </div>

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Tour, UserProfile, Guest, PartnerAgency } from '../types';
 import { db } from '../services/firebase';
 import { doc, updateDoc, Timestamp } from 'firebase/firestore';
-import { ChevronDown, LogOut, Users, Plus, Phone, Info, Star, Calendar, History, Wallet, LayoutGrid, Sparkles, Briefcase, Armchair, Tag, Clock, MapPin, X, ArrowRight, CheckCircle } from 'lucide-react';
+import { ChevronDown, LogOut, Users, Plus, Phone, Info, Star, Calendar, History, Wallet, LayoutGrid, Sparkles, Briefcase, Armchair, Tag, Clock, MapPin, X, CheckCircle } from 'lucide-react';
 import { calculateAgencySettlement } from '../utils/calculations';
 
 interface AgencyDashboardProps {
@@ -20,7 +20,7 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
   // Booking Modal State
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [targetTour, setTargetTour] = useState<Tour | null>(null);
-  const [newBooking, setNewBooking] = useState({ name: '', phone: '', seatCount: '', unitPrice: '' });
+  const [newBooking, setNewBooking] = useState({ name: '', phone: '', seatCount: '', unitPrice: '', seatNumbers: '' });
 
   const getLocalDateString = () => {
     const d = new Date();
@@ -115,7 +115,7 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
 
   const openBookingModal = (tour: Tour) => {
       setTargetTour(tour);
-      setNewBooking({ name: '', phone: '', seatCount: '', unitPrice: '' });
+      setNewBooking({ name: '', phone: '', seatCount: '', unitPrice: '', seatNumbers: '' });
       setIsBookingModalOpen(true);
   };
 
@@ -157,6 +157,7 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
           seatCount: seatCount,
           unitPrice: unitPrice,
           collection: seatCount * unitPrice,
+          seatNumbers: newBooking.seatNumbers, // Added seat numbers here
           seatType: 'regular' 
       };
 
@@ -403,7 +404,14 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
                                                 </div>
                                                 <div>
                                                     <p className="font-bold text-slate-800 text-xs">{guest.name}</p>
-                                                    <p className="text-[9px] text-slate-400 font-bold flex items-center gap-1"><Phone size={8}/> {guest.phone || '-'}</p>
+                                                    <p className="text-[9px] text-slate-400 font-bold flex items-center gap-1">
+                                                        <Phone size={8}/> {guest.phone || '-'}
+                                                        {guest.seatNumbers && (
+                                                            <span className="text-violet-600 bg-violet-50 px-1 rounded ml-1 border border-violet-100">
+                                                                {guest.seatNumbers}
+                                                            </span>
+                                                        )}
+                                                    </p>
                                                 </div>
                                             </div>
                                             <div className="text-right">
@@ -453,6 +461,15 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
                             onChange={e => setNewBooking({...newBooking, phone: e.target.value})}
                             className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-300"
                             placeholder="017..."
+                          />
+                      </div>
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">সিট নম্বর</label>
+                          <input 
+                            value={newBooking.seatNumbers}
+                            onChange={e => setNewBooking({...newBooking, seatNumbers: e.target.value})}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-300"
+                            placeholder="A1, B2..."
                           />
                       </div>
                       <div className="grid grid-cols-2 gap-4">

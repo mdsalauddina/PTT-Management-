@@ -1,30 +1,29 @@
-
 import React, { useState, useEffect } from 'react';
 import { db } from '../services/firebase';
 import { collection, addDoc, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { Tour, CommonTabProps, BusConfig, DailyExpense } from '../types';
-import { Plus, Edit2, DollarSign, Bus, Settings, MapPin, Save, ArrowLeft, Trash2, Clock, Utensils, UserPlus, User, Loader, Building } from 'lucide-react';
+import { Plus, Edit2, DollarSign, Bus, Settings, MapPin, Save, ArrowLeft, Trash2, Clock, Utensils, UserPlus, User, Loader, Building, ChevronDown } from 'lucide-react';
 import { calculateBusFare } from '../utils/calculations';
 
 // UI Helpers - Compact & Refined
 const Card = ({ children, className = "" }: { children?: React.ReactNode, className?: string }) => (
-  <div className={`bg-white rounded-2xl shadow-sm border border-slate-100 ${className}`}>
+  <div className={`bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden ${className}`}>
       {children}
   </div>
 );
 
 const SectionHeader = ({ icon: Icon, title, color = "text-slate-800" }: any) => (
-    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-50">
-        <div className={`p-2 rounded-xl ${color.replace('text-', 'bg-').replace('700', '50').replace('800', '50')} ${color}`}>
-          <Icon size={16} />
+    <div className="flex items-center gap-2 mb-3 pb-2 border-b border-slate-50">
+        <div className={`p-1.5 rounded-lg ${color.replace('text-', 'bg-').replace('700', '50').replace('800', '50')} ${color}`}>
+          <Icon size={14} />
         </div>
-        <h3 className={`text-xs font-bold uppercase tracking-widest ${color}`}>{title}</h3>
+        <h3 className={`text-[10px] font-bold uppercase tracking-widest ${color}`}>{title}</h3>
     </div>
 );
 
 const InputGroup = ({ label, children }: any) => (
-    <div className="space-y-1.5">
-        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1 flex items-center gap-1">
+    <div className="space-y-1">
+        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1 flex items-center gap-1 truncate">
             {label}
         </label>
         {children}
@@ -34,7 +33,7 @@ const InputGroup = ({ label, children }: any) => (
 const StyledInput = (props: any) => (
     <input 
       {...props}
-      className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all placeholder:text-slate-300 shadow-sm ${props.className || ''}`} 
+      className={`w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all placeholder:text-slate-300 shadow-sm min-w-0 ${props.className || ''}`} 
     />
 );
 
@@ -225,24 +224,25 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
     <div className="animate-fade-in font-sans text-slate-800">
       {!isCreating ? (
         <>
-          <div className="flex justify-between items-center mb-6">
-            <div className="hidden lg:block"></div>
-            <div className="lg:hidden">
-                <h2 className="text-lg font-black text-slate-800 tracking-tight">ট্যুর ইভেন্ট</h2>
-            </div>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-sm font-black text-slate-800 tracking-tight lg:hidden">ট্যুর ইভেন্ট</h2>
             {isAdmin && (
               <button 
                 type="button"
                 onClick={() => { resetForm(); setIsCreating(true); }}
-                className="bg-slate-900 text-white pl-4 pr-5 py-2.5 rounded-xl flex items-center shadow-md hover:bg-slate-800 transition-all active:scale-95 text-[10px] font-bold uppercase tracking-widest group border border-slate-900"
+                className="bg-slate-900 text-white px-3 py-2 rounded-xl flex items-center shadow-md hover:bg-slate-800 transition-all active:scale-95 text-[10px] font-bold uppercase tracking-widest group border border-slate-900 ml-auto"
               >
-                <Plus size={14} className="mr-2 group-hover:rotate-90 transition-transform duration-300" /> নতুন তৈরি করুন
+                <Plus size={14} className="mr-1.5 group-hover:rotate-90 transition-transform duration-300" /> নতুন তৈরি
               </button>
             )}
           </div>
 
-          <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
-            {tours.map((tour, index) => {
+          <div className="grid gap-3 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+            {tours.length === 0 ? (
+                <div className="col-span-full py-12 text-center text-slate-400 bg-white rounded-2xl border border-slate-100 border-dashed">
+                    <p className="text-xs font-bold">কোন ট্যুর পাওয়া যায়নি</p>
+                </div>
+            ) : tours.map((tour, index) => {
               const assignedHostEmail = tour.assignedHostId ? getHostEmailById(tour.assignedHostId) : null;
               const gradients = [
                   "from-violet-500 to-indigo-500",
@@ -257,9 +257,9 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
                   key={tour.id}
                   className="group relative bg-white rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border border-slate-100 overflow-hidden flex flex-col"
                 >
-                    <div className={`h-32 bg-gradient-to-r ${gradientClass} relative p-5`}>
-                         <div className="absolute top-0 right-0 p-6 opacity-20 text-white transform rotate-12">
-                            <Bus size={80} />
+                    <div className={`h-24 bg-gradient-to-r ${gradientClass} relative p-4`}>
+                         <div className="absolute top-0 right-0 p-4 opacity-20 text-white transform rotate-12">
+                            <Bus size={60} />
                          </div>
                          <div className="relative z-10 flex flex-col h-full justify-between">
                              <div className="flex justify-between items-start">
@@ -274,50 +274,50 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
                                             setTourData(tour); 
                                             setIsCreating(true); 
                                         }}
-                                        className="p-2 bg-white/20 hover:bg-white text-white hover:text-slate-900 rounded-lg backdrop-blur-md transition-all"
+                                        className="p-1.5 bg-white/20 hover:bg-white text-white hover:text-slate-900 rounded-lg backdrop-blur-md transition-all"
                                     >
-                                        <Edit2 size={14} />
+                                        <Edit2 size={12} />
                                     </button>
                                     {isAdmin && (
                                         <button 
                                             onClick={(e) => handleDelete(e, tour.id)}
-                                            className="p-2 bg-white/20 hover:bg-rose-500 text-white rounded-lg backdrop-blur-md transition-all"
+                                            className="p-1.5 bg-white/20 hover:bg-rose-500 text-white rounded-lg backdrop-blur-md transition-all"
                                         >
-                                            <Trash2 size={14} />
+                                            <Trash2 size={12} />
                                         </button>
                                     )}
                                 </div>
                              </div>
-                             <h3 className="text-white font-black text-xl tracking-tight leading-tight line-clamp-2 pr-10">
+                             <h3 className="text-white font-black text-lg tracking-tight leading-tight line-clamp-1 pr-8 truncate">
                                 {tour.name}
                              </h3>
                          </div>
                     </div>
 
                   <div 
-                    className="p-5 flex-1 cursor-pointer flex flex-col gap-4"
+                    className="p-4 flex-1 cursor-pointer flex flex-col gap-3"
                     onClick={() => { setActiveTour(tour); setTourData(tour); setIsCreating(true); }}
                   >
-                      <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500">
+                      <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold text-slate-500">
                           <span className="flex items-center gap-1 bg-slate-50 px-2 py-1.5 rounded-lg border border-slate-100">
-                              <Clock size={12} className="text-slate-400" /> {tour.duration} দিন
+                              <Clock size={10} className="text-slate-400" /> {tour.duration} দিন
                           </span>
                           {assignedHostEmail && (
-                              <span className="flex items-center gap-1 bg-violet-50 text-violet-600 px-2 py-1.5 rounded-lg border border-violet-100">
-                                  <User size={12} /> {assignedHostEmail.split('@')[0]}
+                              <span className="flex items-center gap-1 bg-violet-50 text-violet-600 px-2 py-1.5 rounded-lg border border-violet-100 truncate max-w-[150px]">
+                                  <User size={10} /> {assignedHostEmail.split('@')[0]}
                               </span>
                           )}
                       </div>
 
                       {isAdmin && (
-                        <div className="mt-auto grid grid-cols-2 gap-2 pt-2">
-                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
-                                <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider mb-0.5">বাস ভাড়া</p>
-                                <p className="font-black text-slate-700 text-sm">৳{Number(tour.busConfig?.totalRent || 0).toLocaleString()}</p>
+                        <div className="mt-auto grid grid-cols-2 gap-2 pt-1">
+                            <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-center">
+                                <p className="text-[8px] text-slate-400 uppercase font-bold tracking-wider mb-0.5">বাস ভাড়া</p>
+                                <p className="font-black text-slate-700 text-xs">৳{Number(tour.busConfig?.totalRent || 0).toLocaleString()}</p>
                             </div>
-                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
-                                <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider mb-0.5">হোটেল</p>
-                                <p className="font-black text-slate-700 text-sm">৳{Number(tour.costs?.hotelCost || 0).toLocaleString()}</p>
+                            <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-center">
+                                <p className="text-[8px] text-slate-400 uppercase font-bold tracking-wider mb-0.5">হোটেল</p>
+                                <p className="font-black text-slate-700 text-xs">৳{Number(tour.costs?.hotelCost || 0).toLocaleString()}</p>
                             </div>
                         </div>
                       )}
@@ -329,17 +329,17 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
         </>
       ) : (
         <div className="animate-fade-in max-w-4xl mx-auto pb-10">
-          <div className="flex justify-between items-center bg-white/90 backdrop-blur-xl p-3 rounded-2xl shadow-sm border border-slate-200 sticky top-4 z-40 mb-6">
-            <div className="flex items-center gap-4">
-                <button type="button" onClick={() => { setIsCreating(false); setActiveTour(null); }} className="w-10 h-10 flex items-center justify-center bg-white rounded-xl text-slate-600 hover:bg-slate-50 border border-slate-200 transition-all">
-                    <ArrowLeft size={18}/>
+          <div className="flex justify-between items-center bg-white/90 backdrop-blur-xl p-3 rounded-2xl shadow-sm border border-slate-200 sticky top-14 sm:top-4 z-40 mb-4">
+            <div className="flex items-center gap-3">
+                <button type="button" onClick={() => { setIsCreating(false); setActiveTour(null); }} className="w-8 h-8 flex items-center justify-center bg-white rounded-xl text-slate-600 hover:bg-slate-50 border border-slate-200 transition-all">
+                    <ArrowLeft size={16}/>
                 </button>
-                <div className="hidden md:block">
-                    <h2 className="font-bold text-slate-800 text-sm tracking-tight">
-                        {activeTour?.id || tourData.id ? 'ট্যুর আপডেট' : 'নতুন ট্যুর'}
+                <div className="flex flex-col">
+                    <h2 className="font-bold text-slate-800 text-xs tracking-tight">
+                        {activeTour?.id || tourData.id ? 'আপডেট' : 'নতুন'}
                     </h2>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">
-                        {isAdmin ? 'তথ্যাবলী পূরণ করুন' : 'খরচ আপডেট করুন'}
+                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wide hidden sm:block">
+                        {isAdmin ? 'তথ্য পূরণ করুন' : 'খরচ আপডেট করুন'}
                     </p>
                 </div>
             </div>
@@ -347,27 +347,27 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
                 type="submit" 
                 form="tour-form"
                 disabled={isSubmitting}
-                className="flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl font-bold shadow-md text-[10px] uppercase tracking-widest hover:bg-slate-800 hover:scale-105 transition-all disabled:opacity-70"
+                className="flex items-center gap-1.5 bg-slate-900 text-white px-4 py-2 rounded-xl font-bold shadow-md text-[10px] uppercase tracking-widest hover:bg-slate-800 hover:scale-105 transition-all disabled:opacity-70"
             >
-                {isSubmitting ? <Loader size={14} className="animate-spin"/> : <Save size={14} />}
-                {isSubmitting ? 'সেভ...' : 'সেভ করুন'}
+                {isSubmitting ? <Loader size={12} className="animate-spin"/> : <Save size={12} />}
+                {isSubmitting ? '...' : 'সেভ'}
             </button>
           </div>
           
-          <form id="tour-form" onSubmit={activeTour?.id || tourData.id ? handleUpdate : handleSubmit} className="space-y-6">
-            <div className={`grid gap-6 ${isAdmin ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
+          <form id="tour-form" onSubmit={activeTour?.id || tourData.id ? handleUpdate : handleSubmit} className="space-y-4">
+            <div className={`grid gap-4 ${isAdmin ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
                 {/* LEFT COLUMN */}
                 {isAdmin && (
-                <div className="space-y-6">
-                    <Card className="p-5">
+                <div className="space-y-4">
+                    <Card className="p-4">
                         <SectionHeader icon={MapPin} title="প্রাথমিক তথ্য" color="text-violet-700" />
-                        <div className="space-y-4">
+                        <div className="space-y-3">
                             <InputGroup label="ট্যুর এর নাম">
                                 <StyledInput required placeholder="নাম" value={tourData.name} onChange={(e: any) => setTourData({...tourData, name: e.target.value})} />
                             </InputGroup>
                             
-                            <div className="p-4 bg-violet-50/50 rounded-xl border border-violet-100/50">
-                                <div className="flex justify-between items-center mb-2">
+                            <div className="p-3 bg-violet-50/50 rounded-xl border border-violet-100/50">
+                                <div className="flex justify-between items-center mb-1.5">
                                     <label className="text-[9px] font-bold text-slate-400 uppercase ml-1 flex items-center gap-1">
                                         <UserPlus size={10} /> হোস্ট
                                     </label>
@@ -376,24 +376,27 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
                                     </button>
                                 </div>
                                 {useManualHostId ? (
-                                    <StyledInput placeholder="UID..." value={tourData.assignedHostId || ''} onChange={(e: any) => setTourData({...tourData, assignedHostId: e.target.value})} className="font-mono text-xs py-2"/>
+                                    <StyledInput placeholder="UID..." value={tourData.assignedHostId || ''} onChange={(e: any) => setTourData({...tourData, assignedHostId: e.target.value})} className="font-mono text-[10px] py-2"/>
                                 ) : (
-                                    <select 
-                                        value={tourData.assignedHostId || ''} 
-                                        onChange={e => setTourData({...tourData, assignedHostId: e.target.value})}
-                                        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-violet-500/20"
-                                    >
-                                        <option value="">-- নির্বাচন --</option>
-                                        {availableHosts.map(host => (
-                                            <option key={host.uid} value={host.uid}>
-                                                {host.email}
-                                            </option>
-                                        ))}
-                                    </select>
+                                    <div className="relative">
+                                        <select 
+                                            value={tourData.assignedHostId || ''} 
+                                            onChange={e => setTourData({...tourData, assignedHostId: e.target.value})}
+                                            className="w-full pl-3 pr-8 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-violet-500/20 appearance-none"
+                                        >
+                                            <option value="">-- নির্বাচন --</option>
+                                            {availableHosts.map(host => (
+                                                <option key={host.uid} value={host.uid}>
+                                                    {host.email}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14}/>
+                                    </div>
                                 )}
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-2 gap-3">
                                 <InputGroup label="তারিখ">
                                     <StyledInput required type="date" value={tourData.date} onChange={(e: any) => setTourData({...tourData, date: e.target.value})} />
                                 </InputGroup>
@@ -404,9 +407,9 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
                         </div>
                     </Card>
 
-                    <Card className="p-5">
+                    <Card className="p-4">
                         <SectionHeader icon={DollarSign} title="আয় (প্রতি সিট)" color="text-emerald-700" />
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-3 gap-2">
                             <InputGroup label="রেগুলার">
                                 <StyledInput type="number" className="text-center font-bold text-emerald-700 bg-emerald-50/50" value={tourData.fees?.regular} onChange={(e: any) => setTourData({...tourData, fees: {...tourData.fees!, regular: safeNumInput(e)}})} />
                             </InputGroup>
@@ -422,11 +425,11 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
                 )}
 
                 {/* RIGHT COLUMN */}
-                <div className="space-y-6">
+                <div className="space-y-4">
                     {isAdmin && (
-                    <Card className="p-5">
+                    <Card className="p-4">
                         <SectionHeader icon={Building} title="ফিক্সড খরচ" color="text-rose-700" />
-                        <div className="grid grid-cols-2 gap-4 mb-6">
+                        <div className="grid grid-cols-2 gap-3 mb-4">
                             <InputGroup label="মোট বাস">
                                 <StyledInput type="number" className="font-bold text-rose-600 bg-rose-50/30" value={tourData.busConfig?.totalRent} onChange={(e: any) => setTourData({...tourData, busConfig: {...tourData.busConfig!, totalRent: safeNumInput(e)}})} />
                             </InputGroup>
@@ -440,14 +443,14 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
                             </div>
                         </div>
                         
-                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                            <label className="text-[9px] font-bold text-slate-400 uppercase mb-3 block">সিট কনফিগারেশন</label>
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                            <label className="text-[9px] font-bold text-slate-400 uppercase mb-2 block">সিট কনফিগারেশন</label>
                             <div className="space-y-2">
-                                <div className="flex items-center gap-3 bg-white p-2 rounded-lg border border-slate-100">
-                                    <div className="w-20">
-                                        <span className="text-[9px] font-bold text-slate-400 block">রেগুলার</span>
+                                <div className="flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-100">
+                                    <div className="w-16">
+                                        <span className="text-[8px] font-bold text-slate-400 block">রেগুলার</span>
                                         <input type="number" value={tourData.busConfig?.regularSeats} onChange={e => setTourData({...tourData, busConfig: {...tourData.busConfig!, regularSeats: safeNumInput(e)}})} 
-                                        className="w-full text-center font-bold border-b border-slate-200 outline-none text-sm" />
+                                        className="w-full text-center font-bold border-b border-slate-200 outline-none text-xs py-1" />
                                     </div>
                                     <div className="flex-1 text-[9px] text-slate-300 font-bold border-l pl-2">বাকি সিট</div>
                                 </div>
@@ -455,16 +458,16 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
                                     const keySeats = `${type}Seats` as keyof BusConfig;
                                     const keyAmount = `${type}Amount` as keyof BusConfig;
                                     return (
-                                        <div key={type} className="flex items-center gap-3 bg-white p-2 rounded-lg border border-slate-100">
-                                            <div className="w-20">
-                                                <span className="text-[9px] font-bold text-slate-400 block">ডিস {idx+1} সিট</span>
+                                        <div key={type} className="flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-100">
+                                            <div className="w-16">
+                                                <span className="text-[8px] font-bold text-slate-400 block">ডিস {idx+1} সিট</span>
                                                 <input type="number" value={tourData.busConfig?.[keySeats] as number} onChange={e => setTourData({...tourData, busConfig: {...tourData.busConfig!, [keySeats]: safeNumInput(e)}})} 
-                                                className="w-full text-center font-bold border-b border-slate-200 outline-none text-sm" />
+                                                className="w-full text-center font-bold border-b border-slate-200 outline-none text-xs py-1" />
                                             </div>
-                                            <div className="flex-1">
-                                                <span className="text-[9px] font-bold text-slate-400 block">জনপ্রতি ছাড়</span>
+                                            <div className="flex-1 min-w-0">
+                                                <span className="text-[8px] font-bold text-slate-400 block truncate">জনপ্রতি ছাড়</span>
                                                 <input type="number" value={tourData.busConfig?.[keyAmount] as number} onChange={e => setTourData({...tourData, busConfig: {...tourData.busConfig!, [keyAmount]: safeNumInput(e)}})} 
-                                                className="w-full font-bold text-rose-500 border-b border-slate-200 outline-none text-sm" />
+                                                className="w-full font-bold text-rose-500 border-b border-slate-200 outline-none text-xs py-1" />
                                             </div>
                                         </div>
                                     )
@@ -473,19 +476,19 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
                         </div>
                         
                         {busFarePreview && (
-                            <div className="mt-4 p-4 bg-slate-800 rounded-xl shadow-md text-white">
+                            <div className="mt-3 p-3 bg-slate-800 rounded-xl shadow-md text-white">
                                 <div className="grid grid-cols-3 gap-2 divide-x divide-slate-600">
                                     <div className="text-center">
                                         <span className="block text-slate-400 text-[8px] font-bold uppercase">বেস</span>
-                                        <span className="font-mono font-bold text-sm">৳{busFarePreview.baseFare}</span>
+                                        <span className="font-mono font-bold text-xs">৳{busFarePreview.baseFare}</span>
                                     </div>
                                     <div className="text-center">
                                         <span className="block text-violet-400 font-bold text-[8px] uppercase">রেগুলার</span>
-                                        <span className="font-mono font-black text-lg">৳{busFarePreview.regularFare}</span>
+                                        <span className="font-mono font-black text-sm">৳{busFarePreview.regularFare}</span>
                                     </div>
                                     <div className="text-center">
                                         <span className="block text-slate-400 text-[8px] font-bold uppercase">D1</span>
-                                        <span className="font-mono font-bold text-sm">৳{busFarePreview.discount1Fare}</span>
+                                        <span className="font-mono font-bold text-xs">৳{busFarePreview.discount1Fare}</span>
                                     </div>
                                 </div>
                             </div>
@@ -493,16 +496,16 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
                     </Card>
                     )}
 
-                    <Card className="p-5">
+                    <Card className="p-4">
                         <SectionHeader icon={Utensils} title="দৈনিক খরচ" color="text-orange-700" />
                         <div className="space-y-3">
                             {tourData.costs?.dailyExpenses?.map((day, index) => (
-                                <div key={index} className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                <div key={index} className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                                     <div className="flex items-center gap-2 mb-2">
-                                        <span className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-bold text-slate-600">{day.day}</span>
+                                        <span className="w-4 h-4 rounded-full bg-slate-200 flex items-center justify-center text-[8px] font-bold text-slate-600">{day.day}</span>
                                         <h4 className="text-[9px] font-bold text-slate-400 uppercase">দিন {day.day}</h4>
                                     </div>
-                                    <div className="grid grid-cols-5 gap-2">
+                                    <div className="grid grid-cols-5 gap-1.5">
                                         {[
                                             { key: 'breakfast', label: 'নাস্তা' },
                                             { key: 'lunch', label: 'দুপুর' },
@@ -510,10 +513,10 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
                                             { key: 'transport', label: 'গাড়ি' },
                                             { key: 'other', label: 'অন্য' }
                                         ].map((item) => (
-                                            <div key={item.key} className="space-y-1">
-                                                <label className="text-[7px] font-bold text-slate-400 uppercase text-center block truncate">{item.label}</label>
+                                            <div key={item.key} className="space-y-0.5">
+                                                <label className="text-[6px] font-bold text-slate-400 uppercase text-center block truncate">{item.label}</label>
                                                 <input type="number" value={(day as any)[item.key]} onChange={e => handleDailyExpenseChange(index, item.key as keyof DailyExpense, safeNumInput(e))}
-                                                className={`w-full p-1.5 border border-slate-200 rounded-lg text-[10px] text-center font-bold outline-none focus:bg-white transition-all ${item.key === 'other' ? 'focus:border-violet-400' : 'focus:border-orange-400'}`} placeholder="0"/>
+                                                className={`w-full p-1 border border-slate-200 rounded-lg text-[10px] text-center font-bold outline-none focus:bg-white transition-all ${item.key === 'other' ? 'focus:border-violet-400 bg-violet-50/20' : 'focus:border-orange-400'}`} placeholder="0"/>
                                             </div>
                                         ))}
                                     </div>
