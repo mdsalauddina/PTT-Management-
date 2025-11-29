@@ -1,13 +1,17 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { CommonTabProps } from '../types';
+import { CommonTabProps, PersonalData } from '../types';
 import { calculateBusFare } from '../utils/calculations';
+import { db } from '../services/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
-import { TrendingUp, Users, DollarSign, AlertCircle, Bus, ChevronDown, Activity, Wallet, Building, Coffee, Car } from 'lucide-react';
+import { TrendingUp, Users, DollarSign, AlertCircle, Bus, ChevronDown, Activity, Wallet, Building, Coffee, Car, Utensils } from 'lucide-react';
 
-const AnalysisTab: React.FC<CommonTabProps> = ({ tours }) => {
+const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
   const [selectedTourId, setSelectedTourId] = useState<string>('');
+  const [personalGuestCount, setPersonalGuestCount] = useState<number>(0);
+  const [personalCollection, setPersonalCollection] = useState<number>(0);
 
   useEffect(() => {
     if (tours.length > 0 && !selectedTourId) {
@@ -17,50 +21,89 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours }) => {
 
   const activeTour = tours.find(t => t.id === selectedTourId) || null;
 
+  // Fetch Personal Data to include in Analysis
+  useEffect(() => {
+    const fetchPersonalData = async () => {
+        if (!activeTour || !user) return;
+        try {
+            const docRef = doc(db, 'personal', `${activeTour.id}_${user.uid}`);
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                const data = docSnap.data() as PersonalData;
+                const pGuests = data.guests ? data.guests.reduce((sum, g) => sum + (Number(g.seatCount)||1), 0) : 0;
+                
+                // Calculate personal collection for accurate financial report
+                const regCount = Number(data.personalStandardCount) || 0;
+                const d1Count = Number(data.personalDisc1Count) || 0;
+                const d2Count = Number(data.personalDisc2Count) || 0;
+                const bookingFee = Number(data.bookingFee) || 0;
+
+                const regFee = Number(activeTour.fees?.regular) || 0;
+                const d1Fee = Number(activeTour.fees?.disc1) || 0;
+                const d2Fee = Number(activeTour.fees?.disc2) || 0;
+
+                // Priority: Use Guest List collection if available, else fallback to counters
+                let pCollection = 0;
+                if (data.guests && data.guests.length > 0) {
+                     pCollection = data.guests.reduce((sum, g) => sum + (Number(g.collection)||0), 0) + bookingFee;
+                } else {
+                     pCollection = (regCount * regFee) + (d1Count * d1Fee) + (d2Count * d2Fee) + bookingFee;
+                }
+                
+                setPersonalGuestCount(pGuests);
+                setPersonalCollection(pCollection);
+            } else {
+                setPersonalGuestCount(0);
+                setPersonalCollection(0);
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    };
+    fetchPersonalData();
+  }, [activeTour, user]);
+
   if (!activeTour) return (
     <div className="h-full flex flex-col items-center justify-center p-10 text-center text-slate-400">
-        <div className="bg-slate-100 p-6 rounded-full mb-4"><TrendingUp size={32} /></div>
-        <p className="font-bold text-sm">কোন ট্যুর ডাটা পাওয়া যায়নি</p>
+        <TrendingUp size={24} className="mb-2 opacity-50"/>
+        <p className="font-bold text-xs">কোন ট্যুর ডাটা পাওয়া যায়নি</p>
     </div>
   );
 
-  // Safety Check
   if (!activeTour.busConfig || !activeTour.costs) {
     return (
-      <div className="p-8 text-center text-rose-500 bg-rose-50 m-4 rounded-[2rem] border border-rose-100 shadow-sm">
-        <AlertCircle className="mx-auto mb-3" size={32} />
-        <p className="font-bold text-lg">কনফিগারেশন অসম্পূর্ণ</p>
-        <p className="text-sm mt-1 text-rose-400">দয়া করে এন্ট্রি ট্যাব থেকে ট্যুর এডিট করে সেভ করুন।</p>
+      <div className="p-8 text-center text-rose-500 bg-rose-50 rounded-3xl border border-rose-100 text-sm font-bold shadow-sm">
+        <AlertCircle className="mx-auto mb-3" size={24} />
+        কনফিগারেশন অসম্পূর্ণ। এন্ট্রি ট্যাব চেক করুন।
       </div>
     );
   }
 
-  const fareData = calculateBusFare(activeTour.busConfig);
-  
-  const totalGuests = activeTour.partnerAgencies 
-    ? activeTour.partnerAgencies.reduce((sum, a) => sum + (a.guests?.length || 0), 0) 
+  // --- CALCULATIONS ---
+
+  // 1. Occupancy: Agency + Personal
+  const agencyGuests = activeTour.partnerAgencies 
+    ? activeTour.partnerAgencies.reduce((sum, a) => sum + (a.guests?.reduce((gSum, g) => gSum + (Number(g.seatCount)||1), 0) || 0), 0) 
     : 0;
 
-  const totalSeats = Number(activeTour.busConfig.totalSeats) || 1;
-  const occupancyRate = (totalGuests / totalSeats) * 100;
+  const totalBooked = agencyGuests + personalGuestCount;
+  const totalSeats = Number(activeTour.busConfig.totalSeats) || 40;
+  const occupancyRate = Math.min((totalBooked / totalSeats) * 100, 100);
+  const vacantSeats = Math.max(0, totalSeats - totalBooked);
 
-  const seatData = [
-    { name: 'রেগুলার', value: Number(activeTour.busConfig.regularSeats) || 0 },
-    { name: 'ডিস ১', value: Number(activeTour.busConfig.discount1Seats) || 0 },
-    { name: 'ডিস ২', value: Number(activeTour.busConfig.discount2Seats) || 0 },
-  ];
-  const COLORS = ['#6366f1', '#10b981', '#f59e0b'];
-
-  const totalCollection = activeTour.partnerAgencies 
+  // 2. Financials
+  const agencyCollection = activeTour.partnerAgencies 
     ? activeTour.partnerAgencies.reduce((sum, a) => 
         sum + (a.guests ? a.guests.reduce((gSum, g) => gSum + Number(g.collection || 0), 0) : 0), 0)
     : 0;
   
-  // Expenses Calculation
+  const totalIncome = agencyCollection + personalCollection;
+
+  // Expenses
   const totalBusRent = Number(activeTour.busConfig.totalRent || 0);
   const totalHostFee = Number(activeTour.costs.hostFee || 0);
   const totalHotelCost = Number(activeTour.costs.hotelCost || 0);
-
+  
   const totalDailyMeals = activeTour.costs?.dailyExpenses 
     ? activeTour.costs.dailyExpenses.reduce((sum, day) => sum + Number(day.breakfast||0) + Number(day.lunch||0) + Number(day.dinner||0), 0)
     : 0;
@@ -73,224 +116,162 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours }) => {
     ? activeTour.costs.dailyExpenses.reduce((sum, day) => sum + Number(day.other||0), 0)
     : 0;
 
-  const totalCosts = totalBusRent + totalHostFee + totalHotelCost + totalDailyMeals + totalDailyTransport + totalDailyExtra;
-  const netProfit = totalCollection - totalCosts;
+  const totalExpenses = totalBusRent + totalHostFee + totalHotelCost + totalDailyMeals + totalDailyTransport + totalDailyExtra;
+  const netProfit = totalIncome - totalExpenses;
+
+  // Charts Data
+  const seatData = [
+    { name: 'বুকড', value: totalBooked, color: '#6366f1' },
+    { name: 'খালি', value: vacantSeats, color: '#f1f5f9' },
+  ];
 
   const financialData = [
-    { name: 'খরচ', amount: totalCosts, fill: '#ef4444' },
-    { name: 'আয়', amount: totalCollection, fill: '#10b981' },
+    { name: 'ব্যয়', amount: totalExpenses, fill: '#ef4444' },
+    { name: 'আয়', amount: totalIncome, fill: '#10b981' },
   ];
 
   return (
-    <div className="p-4 space-y-6 animate-fade-in pb-24 lg:pb-10 max-w-5xl mx-auto">
-      {/* Selector */}
-      <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 relative z-20">
-        <div className="p-3 bg-violet-50 rounded-xl text-violet-600">
-            <TrendingUp size={20} />
-        </div>
-        <div className="flex-1">
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">বিশ্লেষণ (Analysis)</label>
-            <div className="relative">
-                <select 
-                    value={selectedTourId}
-                    onChange={(e) => setSelectedTourId(e.target.value)}
-                    className="w-full appearance-none bg-transparent text-slate-800 text-lg font-black focus:outline-none cursor-pointer pr-8"
-                >
-                    {tours.map(t => <option key={t.id} value={t.id}>{t.name} ({t.date})</option>)}
-                </select>
-                <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} strokeWidth={2.5} />
+    <div className="space-y-6 animate-fade-in pb-20 max-w-5xl mx-auto font-sans">
+      {/* Compact Selector */}
+      <div className="flex items-center justify-between bg-white px-5 py-4 rounded-3xl border border-slate-100 shadow-lg shadow-slate-100/50 sticky top-0 z-20">
+        <div className="flex items-center gap-4">
+            <div className="p-3 bg-violet-50 text-violet-600 rounded-2xl ring-4 ring-violet-50/50">
+                <Activity size={20} />
             </div>
+            <div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">চলমান ট্যুর</p>
+                <div className="relative group">
+                    <select 
+                        value={selectedTourId}
+                        onChange={(e) => setSelectedTourId(e.target.value)}
+                        className="appearance-none bg-transparent font-black text-slate-700 text-lg focus:outline-none cursor-pointer pr-8"
+                    >
+                        {tours.map(t => <option key={t.id} value={t.id}>{t.name} ({t.date})</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-hover:text-slate-600" size={16} strokeWidth={3} />
+                </div>
+            </div>
+        </div>
+        <div className={`px-4 py-2 rounded-2xl text-xs font-bold border-2 ${netProfit >= 0 ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'} shadow-sm`}>
+            {netProfit >= 0 ? 'লাভজনক' : 'লোকসান'}
         </div>
       </div>
       
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Occupancy Card */}
-        <div className="relative overflow-hidden bg-slate-900 p-6 rounded-[2rem] shadow-xl text-white col-span-1 lg:col-span-2 group">
-             <div className="absolute top-0 right-0 p-8 opacity-10 transform group-hover:scale-110 transition-transform duration-700">
-                <Users size={100} />
-             </div>
-             <div className="relative z-10">
-                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-2 flex items-center gap-2">
-                    <Bus size={12}/> বাস অকুপেন্সি
-                </p>
-                <div className="flex items-baseline gap-1">
-                    <span className="text-5xl font-black tracking-tighter">{occupancyRate.toFixed(0)}</span>
-                    <span className="text-xl font-bold opacity-60">%</span>
-                </div>
-                <div className="mt-4 w-full bg-white/10 h-2 rounded-full overflow-hidden">
-                    <div className="bg-gradient-to-r from-violet-500 to-indigo-500 h-full rounded-full transition-all duration-1000 ease-out" style={{ width: `${Math.min(occupancyRate, 100)}%` }}></div>
-                </div>
-                <p className="text-xs text-slate-400 mt-2 font-medium">{totalGuests} / {totalSeats} সিট বুকড</p>
-             </div>
-        </div>
-        
-        {/* Profit/Loss Card */}
-        <div className={`relative overflow-hidden p-6 rounded-[2rem] shadow-xl text-white col-span-1 lg:col-span-2 flex flex-col justify-between group ${netProfit >= 0 ? 'bg-gradient-to-br from-emerald-600 to-teal-800' : 'bg-gradient-to-br from-rose-600 to-orange-800'}`}>
-            <div className="absolute -bottom-6 -right-6 opacity-20 transform group-hover:rotate-12 transition-transform duration-700">
-                <Wallet size={120} />
-            </div>
+      {/* Top Stats Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {/* Occupancy */}
+        <div className="col-span-2 bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-md shadow-slate-200/50 flex items-center justify-between relative overflow-hidden group">
             <div className="relative z-10">
-                <p className="text-white/80 text-[10px] font-bold uppercase tracking-widest mb-2 flex items-center gap-2">
-                    <Activity size={12}/> নেট লাভ/ক্ষতি
-                </p>
-                <div className="flex items-center">
-                    <span className="text-4xl font-black tracking-tighter">
-                        {netProfit >= 0 ? '+' : ''}{netProfit.toLocaleString()}
-                    </span>
-                    <span className="text-xl ml-1 font-bold opacity-70">৳</span>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">মোট বুকিং</p>
+                <div className="flex items-baseline gap-1.5 mb-3">
+                    <span className="text-4xl font-black text-slate-800 tracking-tight">{totalBooked}</span>
+                    <span className="text-xs font-bold text-slate-400">/ {totalSeats} সিট</span>
+                </div>
+                <div className="flex gap-2">
+                    <span className="text-[9px] bg-blue-50 text-blue-600 px-2 py-1 rounded-lg font-bold border border-blue-100">এজেন্সি: {agencyGuests}</span>
+                    <span className="text-[9px] bg-purple-50 text-purple-600 px-2 py-1 rounded-lg font-bold border border-purple-100">পার্সোনাল: {personalGuestCount}</span>
                 </div>
             </div>
-            <div className="relative z-10 mt-auto">
-                <span className="inline-block text-[10px] font-bold bg-white/20 px-3 py-1.5 rounded-lg backdrop-blur-md border border-white/10 uppercase tracking-wide">
-                    {netProfit >= 0 ? 'লাভজনক ইভেন্ট' : 'লোকসান'}
-                </span>
-            </div>
-        </div>
-      </div>
-
-      {/* DETAILED BREAKDOWN (NEW ADDITION) */}
-      <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
-          <div className="flex items-center gap-2 mb-6 pb-4 border-b border-slate-50">
-             <div className="p-2 bg-orange-50 rounded-lg text-orange-600">
-                <Activity size={18} />
-             </div>
-             <h3 className="font-bold text-slate-700 text-sm uppercase tracking-widest">খরচের বিস্তারিত ব্রেকডাউন</h3>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
-              <div className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors">
-                  <div className="flex items-center gap-3">
-                      <div className="p-2 bg-violet-50 text-violet-500 rounded-lg"><Bus size={14} /></div>
-                      <span className="text-slate-600 font-bold text-xs uppercase">বাস ভাড়া</span>
-                  </div>
-                  <span className="font-mono font-bold text-slate-800">৳{totalBusRent.toLocaleString()}</span>
-              </div>
-
-              <div className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors">
-                  <div className="flex items-center gap-3">
-                      <div className="p-2 bg-pink-50 text-pink-500 rounded-lg"><Building size={14} /></div>
-                      <span className="text-slate-600 font-bold text-xs uppercase">হোটেল খরচ</span>
-                  </div>
-                  <span className="font-mono font-bold text-slate-800">৳{totalHotelCost.toLocaleString()}</span>
-              </div>
-
-              <div className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors">
-                  <div className="flex items-center gap-3">
-                      <div className="p-2 bg-orange-50 text-orange-500 rounded-lg"><Coffee size={14} /></div>
-                      <span className="text-slate-600 font-bold text-xs uppercase">খাবার খরচ (মোট)</span>
-                  </div>
-                  <span className="font-mono font-bold text-slate-800">৳{totalDailyMeals.toLocaleString()}</span>
-              </div>
-
-              <div className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors">
-                  <div className="flex items-center gap-3">
-                      <div className="p-2 bg-blue-50 text-blue-500 rounded-lg"><Car size={14} /></div>
-                      <span className="text-slate-600 font-bold text-xs uppercase">লোকাল ট্রান্সপোর্ট (মোট)</span>
-                  </div>
-                  <span className="font-mono font-bold text-slate-800">৳{totalDailyTransport.toLocaleString()}</span>
-              </div>
-
-              <div className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors">
-                  <div className="flex items-center gap-3">
-                      <div className="p-2 bg-gray-50 text-gray-500 rounded-lg"><Activity size={14} /></div>
-                      <span className="text-slate-600 font-bold text-xs uppercase">অন্যান্য / এক্সট্রা</span>
-                  </div>
-                  <span className="font-mono font-bold text-slate-800">৳{totalDailyExtra.toLocaleString()}</span>
-              </div>
-
-              <div className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors border-t md:border-t-0 border-slate-100 mt-2 md:mt-0">
-                  <div className="flex items-center gap-3">
-                      <div className="p-2 bg-teal-50 text-teal-500 rounded-lg"><Users size={14} /></div>
-                      <span className="text-slate-600 font-bold text-xs uppercase">হোস্ট ফি</span>
-                  </div>
-                  <span className="font-mono font-bold text-slate-800">৳{totalHostFee.toLocaleString()}</span>
-              </div>
-          </div>
-          
-          <div className="mt-6 pt-4 border-t border-dashed border-slate-200 flex justify-between items-center">
-              <span className="text-rose-500 font-black text-xs uppercase tracking-widest">সর্বমোট খরচ</span>
-              <span className="text-xl font-black text-rose-600">৳{totalCosts.toLocaleString()}</span>
-          </div>
-      </div>
-
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 h-96 flex flex-col">
-            <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center">
-                    <div className="w-2 h-2 bg-violet-500 rounded-full mr-2"></div>সিট বিন্যাস
-                </h3>
-            </div>
-            <div className="flex-1 w-full">
-                <ResponsiveContainer width="100%" height="100%">
+            <div className="w-24 h-24 relative">
+                 <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                        <Pie data={seatData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" stroke="none">
-                            {seatData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                            ))}
+                        <Pie data={seatData} innerRadius={25} outerRadius={40} paddingAngle={0} dataKey="value" stroke="none">
+                            {seatData.map((entry, index) => <Cell key={index} fill={entry.color} />)}
                         </Pie>
-                        <Tooltip contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)', fontWeight: 'bold', padding: '12px'}} />
-                        <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '12px', fontWeight: 'bold', color: '#64748b', paddingTop: '20px'}}/>
                     </PieChart>
                 </ResponsiveContainer>
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <span className="text-[10px] font-black text-slate-400">{Math.round(occupancyRate)}%</span>
+                </div>
             </div>
         </div>
 
-        <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 h-96 flex flex-col">
-            <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center">
-                    <div className="w-2 h-2 bg-rose-500 rounded-full mr-2"></div>আয় বনাম ব্যয়
-                </h3>
-            </div>
-            <div className="flex-1 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={financialData} margin={{top: 10, right: 10, left: -20, bottom: 0}}>
-                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11, fontWeight: 700}} dy={10} />
-                        <YAxis axisLine={false} tickLine={false} tick={{fill: '#cbd5e1', fontSize: 10, fontWeight: 600}} />
-                        <Tooltip cursor={{fill: '#f8fafc', radius: 8}} contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)', fontWeight: 'bold', padding: '12px'}} />
-                        <Bar dataKey="amount" radius={[8, 8, 0, 0]} barSize={50}>
-                          {
-                            financialData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.fill} />
-                            ))
-                          }
-                        </Bar>
-                    </BarChart>
-                </ResponsiveContainer>
-            </div>
+        {/* Income vs Expense Mini Cards */}
+        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-md shadow-slate-200/50 flex flex-col justify-center relative overflow-hidden group hover:-translate-y-1 transition-transform">
+            <div className="absolute -right-4 -top-4 w-16 h-16 bg-emerald-50 rounded-full blur-2xl opacity-50"></div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5"><TrendingUp size={12} className="text-emerald-500"/> মোট আয়</p>
+            <p className="text-2xl font-black text-emerald-600 tracking-tight">৳{totalIncome.toLocaleString()}</p>
+        </div>
+        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-md shadow-slate-200/50 flex flex-col justify-center relative overflow-hidden group hover:-translate-y-1 transition-transform">
+            <div className="absolute -right-4 -top-4 w-16 h-16 bg-rose-50 rounded-full blur-2xl opacity-50"></div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5"><Wallet size={12} className="text-rose-500"/> মোট ব্যয়</p>
+            <p className="text-2xl font-black text-rose-500 tracking-tight">৳{totalExpenses.toLocaleString()}</p>
         </div>
       </div>
 
-      {/* Fare Breakdown Table */}
-      <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
-        <div className="px-6 py-5 border-b border-slate-50 bg-slate-50/50 flex justify-between items-center">
-            <h3 className="font-bold text-slate-700 text-xs uppercase tracking-widest flex items-center gap-2">
-                <Bus size={16} className="text-violet-500" /> বাস ভাড়া ক্যালকুলেশন
-            </h3>
-            <span className="text-[10px] text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100 font-bold uppercase tracking-wider">Automated</span>
-        </div>
-        <div className="divide-y divide-slate-50 text-sm">
-            <div className="flex justify-between px-6 py-5 items-center group hover:bg-slate-50 transition-colors">
-                <span className="text-slate-500 font-bold text-xs uppercase tracking-wide">বেস ফেয়ার (আসল খরচ)</span>
-                <span className="font-mono font-bold text-slate-800 bg-slate-100 px-3 py-1 rounded-lg">৳ {fareData.baseFare}</span>
-            </div>
-            <div className="flex justify-between px-6 py-5 bg-violet-50/30 border-l-4 border-violet-500 items-center">
-                <div className="flex flex-col">
-                    <span className="text-violet-900 font-bold text-sm">রেগুলার ভাড়া</span>
-                    <span className="text-[10px] text-violet-400 font-bold uppercase tracking-wide mt-0.5">সাবসিডি সহ</span>
+      {/* Main Analysis Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left: Detailed Cost Breakdown */}
+          <div className="lg:col-span-2 bg-white rounded-[2.5rem] border border-slate-200/60 overflow-hidden shadow-lg shadow-slate-200/40">
+             <div className="px-8 py-6 border-b border-slate-50 flex justify-between items-center bg-white">
+                 <h3 className="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center gap-3">
+                     <div className="p-2 bg-slate-100 rounded-xl"><Activity size={16} className="text-slate-500"/></div>
+                     খরচের ব্রেকডাউন
+                 </h3>
+                 <span className="text-[10px] font-bold bg-slate-50 border border-slate-200 px-3 py-1 rounded-full text-slate-400 uppercase tracking-wider">অটোমেটেড</span>
+             </div>
+             
+             <div className="p-6 space-y-3">
+                {[
+                    { label: 'বাস ভাড়া (ফিক্সড)', amount: totalBusRent, icon: Bus, color: 'text-violet-500', bg: 'bg-violet-50', border: 'border-violet-100' },
+                    { label: 'হোটেল খরচ', amount: totalHotelCost, icon: Building, color: 'text-indigo-500', bg: 'bg-indigo-50', border: 'border-indigo-100' },
+                    { label: 'খাবার খরচ (মোট)', amount: totalDailyMeals, icon: Utensils, color: 'text-orange-500', bg: 'bg-orange-50', border: 'border-orange-100' },
+                    { label: 'লোকাল ট্রান্সপোর্ট', amount: totalDailyTransport, icon: Car, color: 'text-blue-500', bg: 'bg-blue-50', border: 'border-blue-100' },
+                    { label: 'অন্যান্য / এক্সট্রা', amount: totalDailyExtra, icon: Coffee, color: 'text-slate-500', bg: 'bg-slate-50', border: 'border-slate-200' },
+                    { label: 'হোস্ট ফি (স্যালারি)', amount: totalHostFee, icon: Users, color: 'text-teal-500', bg: 'bg-teal-50', border: 'border-teal-100' },
+                ].map((item, i) => (
+                    <div key={i} className={`flex items-center justify-between p-4 rounded-2xl border ${item.border} ${item.bg} bg-opacity-40 hover:bg-opacity-100 transition-all cursor-default`}>
+                        <div className="flex items-center gap-4">
+                            <div className={`p-2.5 rounded-xl bg-white shadow-sm ${item.color}`}>
+                                <item.icon size={16} />
+                            </div>
+                            <span className="font-bold text-slate-700 text-xs uppercase tracking-wide">{item.label}</span>
+                        </div>
+                        <span className="font-mono font-black text-slate-800 text-sm">৳{item.amount.toLocaleString()}</span>
+                    </div>
+                ))}
+                
+                <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center px-4">
+                    <span className="text-xs font-black text-rose-500 uppercase tracking-widest">সর্বমোট খরচ</span>
+                    <span className="text-xl font-black text-rose-600 font-mono tracking-tight">৳{totalExpenses.toLocaleString()}</span>
                 </div>
-                <span className="font-mono font-black text-violet-700 text-xl">৳ {fareData.regularFare}</span>
-            </div>
-            <div className="flex justify-between px-6 py-5 items-center group hover:bg-slate-50 transition-colors">
-                <span className="text-slate-500 font-bold text-xs uppercase tracking-wide">ডিসকাউন্ট ১ ভাড়া</span>
-                <span className="font-mono font-bold text-slate-700">৳ {fareData.discount1Fare}</span>
-            </div>
-            <div className="flex justify-between px-6 py-5 items-center group hover:bg-slate-50 transition-colors">
-                <span className="text-slate-500 font-bold text-xs uppercase tracking-wide">ডিসকাউন্ট ২ ভাড়া</span>
-                <span className="font-mono font-bold text-slate-700">৳ {fareData.discount2Fare}</span>
-            </div>
-        </div>
+             </div>
+          </div>
+
+          {/* Right: Net Profit Card & Charts */}
+          <div className="space-y-6">
+               <div className={`rounded-[2.5rem] p-8 border shadow-xl relative overflow-hidden flex flex-col justify-between min-h-[200px] transition-all duration-500 hover:scale-[1.02] ${netProfit >= 0 ? 'bg-gradient-to-bl from-emerald-500 to-teal-600 border-emerald-400 text-white shadow-emerald-200' : 'bg-gradient-to-bl from-rose-500 to-orange-600 border-rose-400 text-white shadow-rose-200'}`}>
+                   <div className="relative z-10">
+                       <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-80 mb-2">নেট প্রফিট / লস</p>
+                       <h2 className="text-4xl font-black tracking-tighter">
+                           {netProfit >= 0 ? '+' : ''}{netProfit.toLocaleString()}<span className="text-xl opacity-70 ml-1">৳</span>
+                       </h2>
+                   </div>
+                   <div className="relative z-10 mt-auto">
+                        <div className="inline-flex items-center gap-1.5 text-[10px] font-bold bg-white/20 px-3 py-1.5 rounded-xl border border-white/20 backdrop-blur-md">
+                            {netProfit >= 0 ? <TrendingUp size={14}/> : <AlertCircle size={14}/>}
+                            {netProfit >= 0 ? 'Profit Margin Active' : 'Loss Detected'}
+                        </div>
+                   </div>
+                   {/* Decorative Icon */}
+                   <div className="absolute -bottom-6 -right-6 text-white opacity-10 transform rotate-12">
+                       <Wallet size={140} />
+                   </div>
+               </div>
+
+               <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-lg shadow-slate-100/50 h-56">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-6 text-center">আয় বনাম ব্যয় গ্রাফ</p>
+                    <ResponsiveContainer width="100%" height="80%">
+                        <BarChart data={financialData} margin={{top: 0, right: 0, left: 0, bottom: 0}} barSize={50}>
+                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 800, fill: '#94a3b8'}} dy={10}/>
+                            <Tooltip cursor={{fill: '#f8fafc', radius: 12}} contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.1)', fontSize: '12px', fontWeight: 'bold', padding: '12px 16px'}} />
+                            <Bar dataKey="amount" radius={[8, 8, 8, 8]}>
+                                {financialData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
+                            </Bar>
+                        </BarChart>
+                    </ResponsiveContainer>
+               </div>
+          </div>
       </div>
     </div>
   );
