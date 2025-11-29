@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, PersonalData, Guest } from '../types';
 import { db } from '../services/firebase';
@@ -154,17 +152,17 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
   return (
     <div className="p-4 space-y-8 animate-fade-in pb-24 lg:pb-10 max-w-3xl mx-auto font-sans">
       {/* Selector */}
-      <div className="bg-white p-2 rounded-3xl shadow-lg shadow-slate-200/50 border border-slate-100 flex items-center gap-4 relative z-20">
+      <div className="bg-white p-2.5 rounded-3xl shadow-lg shadow-slate-200/50 border border-slate-100 flex items-center gap-4 relative z-20">
         <div className="p-3 bg-indigo-50 rounded-2xl text-indigo-600 ring-4 ring-indigo-50/50">
             <UserCircle size={20} />
         </div>
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
             <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">ব্যক্তিগত হিসাব</label>
             <div className="relative">
                 <select 
                     value={selectedTourId}
                     onChange={(e) => setSelectedTourId(e.target.value)}
-                    className="w-full appearance-none bg-transparent text-slate-800 text-lg font-black focus:outline-none cursor-pointer pr-8"
+                    className="w-full appearance-none bg-transparent text-slate-800 text-lg font-black focus:outline-none cursor-pointer pr-8 truncate"
                 >
                     {tours.map(t => <option key={t.id} value={t.id}>{t.name} ({t.date})</option>)}
                 </select>
@@ -188,10 +186,10 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
       
       {/* Guest List Card */}
       <div className="bg-white rounded-[2.5rem] shadow-lg shadow-slate-200/50 border border-slate-100 overflow-hidden">
-        <div className="px-8 py-6 border-b border-slate-50 flex justify-between items-center bg-white">
-            <h3 className="font-bold text-slate-700 text-xs uppercase tracking-widest flex items-center gap-3">
+        <div className="px-6 py-5 border-b border-slate-50 flex justify-between items-center bg-white">
+            <h3 className="font-bold text-slate-700 text-xs uppercase tracking-widest flex items-center gap-2">
                 <div className="p-2 bg-indigo-50 rounded-xl"><UserPlus size={16} className="text-indigo-500"/></div>
-                আমার গেস্ট লিস্ট
+                গেস্ট লিস্ট
             </h3>
             <button 
                 onClick={() => setIsAddingGuest(!isAddingGuest)}
@@ -202,32 +200,32 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
         </div>
         
         {isAddingGuest && (
-            <div className="p-8 bg-slate-50/50 border-b border-slate-100 animate-fade-in">
-                <div className="grid grid-cols-2 gap-5 mb-6">
+            <div className="p-6 bg-slate-50/50 border-b border-slate-100 animate-fade-in">
+                <div className="grid grid-cols-2 gap-4 mb-6">
                     <div className="col-span-2">
                         <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 block mb-1">নাম</label>
-                        <input className="w-full border border-slate-200 bg-white p-4 rounded-2xl text-sm outline-none font-bold focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all" value={newGuest.name} onChange={e => setNewGuest({...newGuest, name: e.target.value})} placeholder="নাম"/>
+                        <input className="w-full border border-slate-200 bg-white p-3.5 rounded-xl text-sm outline-none font-bold focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all" value={newGuest.name} onChange={e => setNewGuest({...newGuest, name: e.target.value})} placeholder="নাম"/>
                     </div>
                     <div className="col-span-2">
                          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 block mb-1">মোবাইল</label>
-                         <input className="w-full border border-slate-200 bg-white p-4 rounded-2xl text-sm outline-none font-bold focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all" value={newGuest.phone} onChange={e => setNewGuest({...newGuest, phone: e.target.value})} placeholder="ফোন"/>
+                         <input className="w-full border border-slate-200 bg-white p-3.5 rounded-xl text-sm outline-none font-bold focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all" value={newGuest.phone} onChange={e => setNewGuest({...newGuest, phone: e.target.value})} placeholder="ফোন"/>
                     </div>
                     <div>
                          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 block mb-1">সিট সংখ্যা</label>
-                         <input type="number" className="w-full border border-slate-200 bg-white p-4 rounded-2xl text-sm outline-none font-bold text-center focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all" value={newGuest.seatCount} onChange={e => setNewGuest({...newGuest, seatCount: e.target.value})} placeholder="1"/>
+                         <input type="number" className="w-full border border-slate-200 bg-white p-3.5 rounded-xl text-sm outline-none font-bold text-center focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all" value={newGuest.seatCount} onChange={e => setNewGuest({...newGuest, seatCount: e.target.value})} placeholder="1"/>
                     </div>
                     <div>
                          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 block mb-1">কালেকশন</label>
-                         <input type="number" className="w-full border border-emerald-200 bg-emerald-50/50 p-4 rounded-2xl text-sm outline-none font-bold text-center text-emerald-700 focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" value={newGuest.unitPrice} onChange={e => setNewGuest({...newGuest, unitPrice: e.target.value})} placeholder="0"/>
+                         <input type="number" className="w-full border border-emerald-200 bg-emerald-50/50 p-3.5 rounded-xl text-sm outline-none font-bold text-center text-emerald-700 focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" value={newGuest.unitPrice} onChange={e => setNewGuest({...newGuest, unitPrice: e.target.value})} placeholder="0"/>
                     </div>
-                    <div className="col-span-2">
-                         <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 block mb-1">সিট নম্বর</label>
-                         <input className="w-full border border-slate-200 bg-white p-4 rounded-2xl text-sm outline-none font-bold focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all" value={newGuest.seatNumbers} onChange={e => setNewGuest({...newGuest, seatNumbers: e.target.value})} placeholder="A1, B2..."/>
+                    <div className="col-span-2 bg-white p-2 rounded-xl border border-slate-200/50">
+                         <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 block mb-1">সিট নম্বর (A1, B2...)</label>
+                         <input className="w-full border border-slate-200 bg-slate-50 p-3.5 rounded-xl text-sm outline-none font-bold focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all" value={newGuest.seatNumbers} onChange={e => setNewGuest({...newGuest, seatNumbers: e.target.value})} placeholder="সিট নম্বর লিখুন"/>
                     </div>
                 </div>
                 <div className="flex justify-end gap-3">
                     <button onClick={() => setIsAddingGuest(false)} className="px-5 py-3 rounded-xl text-slate-500 text-xs font-bold hover:bg-slate-200 transition-colors">বাতিল</button>
-                    <button onClick={handleAddGuest} className="bg-indigo-600 text-white px-8 py-3 rounded-xl text-xs font-bold shadow-xl shadow-indigo-200 hover:bg-indigo-700 hover:scale-105 transition-all">লিস্টে যোগ করুন</button>
+                    <button onClick={handleAddGuest} className="bg-indigo-600 text-white px-8 py-3 rounded-xl text-xs font-bold shadow-xl shadow-indigo-200 hover:bg-indigo-700 hover:scale-105 transition-all">যোগ করুন</button>
                 </div>
             </div>
         )}

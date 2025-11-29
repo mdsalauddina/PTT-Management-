@@ -39,6 +39,7 @@ export interface TourCosts {
   perHead: number;
   hostFee: number;
   hotelCost: number; // Added field for total hotel cost
+  otherFixedCosts: { id: string; name: string; amount: number }[]; // Added dynamic extra fixed costs
   dailyExpenses: DailyExpense[];
 }
 

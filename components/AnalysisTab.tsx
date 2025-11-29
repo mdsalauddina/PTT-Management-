@@ -5,8 +5,8 @@ import { CommonTabProps, PersonalData } from '../types';
 import { db } from '../services/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from 'recharts';
-import { TrendingUp, Activity, Wallet, Building, Coffee, Car, Utensils, Users, ChevronDown, AlertCircle, Bus, Tags } from 'lucide-react';
-import { calculateBusFare, calculateTotalDailyExpenses, safeNum } from '../utils/calculations';
+import { TrendingUp, Activity, Wallet, Building, Coffee, Car, Utensils, Users, ChevronDown, AlertCircle, Bus, Tags, PlusCircle } from 'lucide-react';
+import { calculateBusFare, calculateTotalDailyExpenses, calculateTotalOtherFixedCosts, safeNum } from '../utils/calculations';
 
 const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
   const [selectedTourId, setSelectedTourId] = useState<string>('');
@@ -95,6 +95,7 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
   const totalBusRent = Number(activeTour.busConfig.totalRent || 0);
   const totalHostFee = Number(activeTour.costs.hostFee || 0);
   const totalHotelCost = Number(activeTour.costs.hotelCost || 0);
+  const totalOtherFixed = calculateTotalOtherFixedCosts(activeTour);
   
   const totalDailyMeals = activeTour.costs?.dailyExpenses 
     ? activeTour.costs.dailyExpenses.reduce((sum, day) => sum + Number(day.breakfast||0) + Number(day.lunch||0) + Number(day.dinner||0), 0)
@@ -108,7 +109,7 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
     ? activeTour.costs.dailyExpenses.reduce((sum, day) => sum + Number(day.other||0), 0)
     : 0;
 
-  const totalExpenses = totalBusRent + totalHostFee + totalHotelCost + totalDailyMeals + totalDailyTransport + totalDailyExtra;
+  const totalExpenses = totalBusRent + totalHostFee + totalHotelCost + totalOtherFixed + totalDailyMeals + totalDailyTransport + totalDailyExtra;
   const netProfit = totalIncome - totalExpenses;
 
   // Per Head Calculations
@@ -116,7 +117,8 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
 
   // --- COST PER SEAT TYPE CALCULATION ---
   const dailyExpensesTotal = calculateTotalDailyExpenses(activeTour);
-  const variableCostPerHead = (totalHostFee + totalHotelCost + dailyExpensesTotal) / totalSeats;
+  // Including Other Fixed Costs in variable portion for Buy Rate
+  const variableCostPerHead = (totalHostFee + totalHotelCost + totalOtherFixed + dailyExpensesTotal) / totalSeats;
   const busFares = calculateBusFare(activeTour.busConfig);
 
   const costPerSeat = {
@@ -226,8 +228,9 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
                             { label: 'হোটেল ভাড়া', total: totalHotelCost, icon: Building, color: 'text-indigo-600' },
                             { label: 'খাবার', total: totalDailyMeals, icon: Utensils, color: 'text-orange-600' },
                             { label: 'লোকাল গাড়ি', total: totalDailyTransport, icon: Car, color: 'text-blue-600' },
-                            { label: 'অন্যান্য', total: totalDailyExtra, icon: Coffee, color: 'text-slate-600' },
                             { label: 'ম্যানেজমেন্ট (Host)', total: totalHostFee, icon: Users, color: 'text-teal-600' },
+                            { label: 'অন্যান্য ফিক্সড খরচ', total: totalOtherFixed, icon: PlusCircle, color: 'text-teal-500' },
+                            { label: 'দৈনিক অন্যান্য', total: totalDailyExtra, icon: Coffee, color: 'text-slate-600' },
                         ].map((item, i) => (
                             <tr key={i} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
                                 <td className="p-3 flex items-center gap-2">
@@ -296,7 +299,7 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
               </div>
           </div>
           <p className="text-[9px] text-slate-400 mt-3 text-center">
-              * এই খরচ = বাস ভাড়া (টাইপ ভিত্তিক) + (ফিক্সড খরচ + দৈনিক খরচ) ÷ মোট সিট
+              * এই খরচ = বাস ভাড়া (টাইপ ভিত্তিক) + (ফিক্সড খরচ + অন্যান্য ফিক্সড + দৈনিক খরচ) ÷ মোট সিট
           </p>
       </div>
 

@@ -1,8 +1,10 @@
+
+
 import React, { useState, useEffect } from 'react';
 import { db } from '../services/firebase';
 import { collection, addDoc, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { Tour, CommonTabProps, BusConfig, DailyExpense } from '../types';
-import { Plus, Edit2, DollarSign, Bus, Settings, MapPin, Save, ArrowLeft, Trash2, Clock, Utensils, UserPlus, User, Loader, Building, ChevronDown } from 'lucide-react';
+import { Plus, Edit2, DollarSign, Bus, Settings, MapPin, Save, ArrowLeft, Trash2, Clock, Utensils, UserPlus, User, Loader, Building, ChevronDown, PlusCircle } from 'lucide-react';
 import { calculateBusFare } from '../utils/calculations';
 
 // UI Helpers - Compact & Refined
@@ -64,6 +66,7 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
       perHead: 1000,
       hostFee: 0,
       hotelCost: 0,
+      otherFixedCosts: [],
       dailyExpenses: []
     }
   };
@@ -139,8 +142,10 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
           const tourRef = doc(db, 'tours', targetId);
           let updateData;
           if (user.role === 'host') {
+             // Host can update Daily Expenses AND Extra Fixed Costs
              updateData = {
                  'costs.dailyExpenses': tourData.costs?.dailyExpenses,
+                 'costs.otherFixedCosts': tourData.costs?.otherFixedCosts,
                  updatedAt: Timestamp.now()
              };
           } else {
@@ -212,6 +217,38 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
       });
   };
 
+  const addOtherFixedCost = () => {
+      setTourData(prev => ({
+          ...prev,
+          costs: {
+              ...prev.costs!,
+              otherFixedCosts: [...(prev.costs?.otherFixedCosts || []), { id: Date.now().toString(), name: '', amount: 0 }]
+          }
+      }));
+  };
+
+  const updateOtherFixedCost = (id: string, field: string, value: any) => {
+      setTourData(prev => ({
+          ...prev,
+          costs: {
+              ...prev.costs!,
+              otherFixedCosts: prev.costs?.otherFixedCosts?.map(item => 
+                  item.id === id ? { ...item, [field]: value } : item
+              ) || []
+          }
+      }));
+  };
+
+  const deleteOtherFixedCost = (id: string) => {
+      setTourData(prev => ({
+          ...prev,
+          costs: {
+              ...prev.costs!,
+              otherFixedCosts: prev.costs?.otherFixedCosts?.filter(item => item.id !== id) || []
+          }
+      }));
+  };
+
   const getHostEmailById = (uid?: string) => {
       if (!uid) return null;
       const host = allUsers.find(h => h.uid === uid);
@@ -219,6 +256,8 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
   };
 
   const isAdmin = user.role === 'admin';
+  // Allow host to see Right Column for expense input
+  const isHost = user.role === 'host'; 
 
   return (
     <div className="animate-fade-in font-sans text-slate-800">
@@ -356,7 +395,7 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
           
           <form id="tour-form" onSubmit={activeTour?.id || tourData.id ? handleUpdate : handleSubmit} className="space-y-4">
             <div className={`grid gap-4 ${isAdmin ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
-                {/* LEFT COLUMN */}
+                {/* LEFT COLUMN - ADMIN ONLY */}
                 {isAdmin && (
                 <div className="space-y-4">
                     <Card className="p-4">
@@ -424,11 +463,11 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
                 </div>
                 )}
 
-                {/* RIGHT COLUMN */}
+                {/* RIGHT COLUMN - ADMIN & HOST */}
                 <div className="space-y-4">
                     {isAdmin && (
                     <Card className="p-4">
-                        <SectionHeader icon={Building} title="ফিক্সড খরচ" color="text-rose-700" />
+                        <SectionHeader icon={Building} title="ফিক্সড খরচ (মূল)" color="text-rose-700" />
                         <div className="grid grid-cols-2 gap-3 mb-4">
                             <InputGroup label="মোট বাস">
                                 <StyledInput type="number" className="font-bold text-rose-600 bg-rose-50/30" value={tourData.busConfig?.totalRent} onChange={(e: any) => setTourData({...tourData, busConfig: {...tourData.busConfig!, totalRent: safeNumInput(e)}})} />
@@ -474,27 +513,56 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
                                 })}
                             </div>
                         </div>
-                        
-                        {busFarePreview && (
-                            <div className="mt-3 p-3 bg-slate-800 rounded-xl shadow-md text-white">
-                                <div className="grid grid-cols-3 gap-2 divide-x divide-slate-600">
-                                    <div className="text-center">
-                                        <span className="block text-slate-400 text-[8px] font-bold uppercase">বেস</span>
-                                        <span className="font-mono font-bold text-xs">৳{busFarePreview.baseFare}</span>
-                                    </div>
-                                    <div className="text-center">
-                                        <span className="block text-violet-400 font-bold text-[8px] uppercase">রেগুলার</span>
-                                        <span className="font-mono font-black text-sm">৳{busFarePreview.regularFare}</span>
-                                    </div>
-                                    <div className="text-center">
-                                        <span className="block text-slate-400 text-[8px] font-bold uppercase">D1</span>
-                                        <span className="font-mono font-bold text-xs">৳{busFarePreview.discount1Fare}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
                     </Card>
                     )}
+
+                    {/* EXTRA FIXED EXPENSES - ADMIN & HOST */}
+                    <Card className="p-4">
+                        <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-50">
+                            <div className="flex items-center gap-2">
+                                <div className="p-1.5 rounded-lg bg-teal-50 text-teal-700">
+                                    <DollarSign size={14} />
+                                </div>
+                                <h3 className="text-[10px] font-bold uppercase tracking-widest text-teal-700">অন্যান্য ফিক্সড খরচ</h3>
+                            </div>
+                            <button type="button" onClick={addOtherFixedCost} className="text-[9px] font-bold bg-teal-50 text-teal-600 px-2 py-1 rounded-lg border border-teal-100 flex items-center gap-1 hover:bg-teal-100">
+                                <PlusCircle size={10} /> নতুন যোগ
+                            </button>
+                        </div>
+                        
+                        <div className="space-y-2">
+                            {!tourData.costs?.otherFixedCosts?.length && (
+                                <p className="text-[9px] text-slate-400 font-bold italic text-center py-2">কোন অতিরিক্ত খরচ নেই</p>
+                            )}
+                            {tourData.costs?.otherFixedCosts?.map((item) => (
+                                <div key={item.id} className="flex gap-2 items-center">
+                                    <input 
+                                        type="text" 
+                                        placeholder="খরচের নাম..."
+                                        value={item.name}
+                                        onChange={(e) => updateOtherFixedCost(item.id, 'name', e.target.value)}
+                                        className="flex-[2] px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:bg-white focus:border-teal-400"
+                                    />
+                                    <div className="relative flex-1">
+                                        <input 
+                                            type="number" 
+                                            placeholder="0"
+                                            value={item.amount}
+                                            onChange={(e) => updateOtherFixedCost(item.id, 'amount', safeNumInput(e))}
+                                            className="w-full pl-2 pr-1 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold text-center outline-none focus:bg-white focus:border-teal-400"
+                                        />
+                                    </div>
+                                    <button 
+                                        type="button" 
+                                        onClick={() => deleteOtherFixedCost(item.id)}
+                                        className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                                    >
+                                        <Trash2 size={12}/>
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </Card>
 
                     <Card className="p-4">
                         <SectionHeader icon={Utensils} title="দৈনিক খরচ" color="text-orange-700" />

@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect } from 'react';
 import { auth, db } from './services/firebase';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
@@ -34,11 +36,21 @@ const App = () => {
             if (userDoc.exists()) {
               const userData = userDoc.data();
               if (userData.role) {
-                  const role = userData.role;
+                  // Normalize role: trim whitespace and lowercase
+                  let rawRole = String(userData.role).trim().toLowerCase();
+                  
+                  // Handle 'moderator' or 'modaretor' as 'host'
+                  if (rawRole === 'moderator' || rawRole === 'modaretor') {
+                      rawRole = 'host';
+                  }
+
+                  const role = rawRole as 'admin' | 'host' | 'agency';
+                  
                   setUser({
                     uid: firebaseUser.uid,
                     email: firebaseUser.email || '',
-                    ...userData
+                    ...userData,
+                    role: role
                   } as UserProfile);
                   
                   // Set default tab based on role
@@ -111,12 +123,11 @@ const App = () => {
         fetchedTours.push({ id: doc.id, ...doc.data() } as Tour);
       });
 
-      // Strict filtering for Host
+      // Strict filtering based on normalized role
       if (user.role === 'host') {
-          // Explicitly convert both IDs to string and trim to avoid mismatches
           const currentUserId = String(user.uid).trim();
           fetchedTours = fetchedTours.filter(t => 
-              t.assignedHostId && String(t.assignedHostId).trim() === currentUserId
+             (t.assignedHostId && String(t.assignedHostId).trim() === currentUserId)
           );
       } else if (user.role === 'agency') {
           const todayStr = getLocalDateString();
@@ -192,8 +203,8 @@ const App = () => {
   const navItems = [
     { id: 'entry', label: 'ট্যুর ইভেন্ট', icon: FolderPlus, role: ['admin', 'host'] },
     { id: 'analysis', label: 'এনালাইসিস', icon: BarChart3, role: ['admin'] },
-    { id: 'personal', label: 'পার্সোনাল', icon: UserCircle, role: ['admin', 'host'] },
-    { id: 'share', label: 'পার্টনার', icon: Users, role: ['admin', 'host'] },
+    { id: 'personal', label: 'পার্সোনাল', icon: UserCircle, role: ['admin'] },
+    { id: 'share', label: 'পার্টনার', icon: Users, role: ['admin'] },
     { id: 'guest_list', label: 'গেস্ট লিস্ট', icon: List, role: ['host', 'admin'] },
     { id: 'final', label: 'ফাইনাল', icon: CheckSquare, role: ['admin'] },
   ];

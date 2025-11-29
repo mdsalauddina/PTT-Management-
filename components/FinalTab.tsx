@@ -5,6 +5,7 @@ import { CommonTabProps, PersonalData } from '../types';
 import { db } from '../services/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { CheckCircle, TrendingUp, Users, DollarSign, Wallet, ChevronDown, Activity, CalendarDays, ArrowRight, Building } from 'lucide-react';
+import { calculateTotalOtherFixedCosts } from '../utils/calculations';
 
 const FinalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
   const [selectedDate, setSelectedDate] = useState<string>('');
@@ -98,7 +99,9 @@ const FinalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
             sum + Number(day.breakfast||0) + Number(day.lunch||0) + Number(day.dinner||0) + Number(day.transport||0) + Number(day.other||0), 0)
         : 0;
       
-      const fixedCosts = Number(tour.busConfig?.totalRent || 0) + Number(tour.costs?.hostFee || 0) + Number(tour.costs?.hotelCost || 0);
+      const otherFixed = calculateTotalOtherFixedCosts(tour);
+
+      const fixedCosts = Number(tour.busConfig?.totalRent || 0) + Number(tour.costs?.hostFee || 0) + Number(tour.costs?.hotelCost || 0) + otherFixed;
       const totalTourExpense = fixedCosts + dailyExp;
 
       const profit = totalTourIncome - totalTourExpense;
