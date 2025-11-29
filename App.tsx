@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import { auth, db } from './services/firebase';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, collection, query, orderBy, getDocs } from 'firebase/firestore';
 import { UserProfile, TabId, Tour } from './types';
-import { LogOut, LayoutGrid, ShieldCheck, Sparkles, FolderPlus, BarChart3, UserCircle, Users, CheckSquare, Lock, Menu } from 'lucide-react';
+import { LogOut, LayoutGrid, ShieldCheck, Sparkles, FolderPlus, BarChart3, UserCircle, Users, CheckSquare, Lock } from 'lucide-react';
 
 // Components
 import EntryTab from './components/EntryTab';
@@ -40,10 +41,10 @@ const App = () => {
                   } as UserProfile);
                   setNoAccess(false);
               } else {
-                  setNoAccess(true); // User exists but has no role
+                  setNoAccess(true);
               }
             } else {
-               setNoAccess(true); // User authenticated but no DB record
+               setNoAccess(true);
             }
         } catch (e) {
             console.error("Error fetching user profile", e);
@@ -101,19 +102,15 @@ const App = () => {
         fetchedTours.push({ id: doc.id, ...doc.data() } as Tour);
       });
 
-      // Filter tours based on role
       if (user.role === 'host') {
-          // STRICT FILTER: Only show if created by host OR assigned explicitly
           fetchedTours = fetchedTours.filter(t => 
               (t.createdBy && t.createdBy === user.email) || 
               (t.assignedHostId && t.assignedHostId === user.uid)
           );
       } else if (user.role === 'agency') {
-          // Agencies see tours if they are ALREADY a partner OR if the tour is UPCOMING (so they can book)
           const todayStr = getLocalDateString();
           fetchedTours = fetchedTours.filter(t => {
              const isPartner = t.partnerAgencies && t.partnerAgencies.some(a => a.email === user.email);
-             // String comparison "YYYY-MM-DD" works correctly for dates
              const isUpcoming = t.date >= todayStr;
              return isPartner || isUpcoming;
           });
@@ -136,53 +133,38 @@ const App = () => {
     return (
         <div className="min-h-screen flex items-center justify-center bg-slate-50">
             <div className="flex flex-col items-center">
-                <div className="w-16 h-16 relative">
-                    <div className="absolute inset-0 border-4 border-slate-200 rounded-full"></div>
-                    <div className="absolute inset-0 border-4 border-violet-600 rounded-full border-t-transparent animate-spin"></div>
-                </div>
-                <p className="mt-6 text-slate-500 font-bold text-xs uppercase tracking-[0.2em] animate-pulse">লোড হচ্ছে...</p>
+                <div className="w-12 h-12 border-4 border-slate-200 rounded-full border-t-violet-600 animate-spin"></div>
             </div>
         </div>
     );
   }
 
-  // Access Denied Screen
   if (noAccess) {
       return (
           <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6 text-center">
-              <div className="glass-panel p-10 rounded-[2.5rem] max-w-sm w-full relative overflow-hidden">
-                  <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-rose-400 to-rose-600"></div>
-                  <div className="bg-rose-50 w-20 h-20 rounded-3xl rotate-3 flex items-center justify-center mx-auto mb-6 text-rose-500 shadow-lg shadow-rose-200">
-                      <Lock size={32} />
+              <div className="bg-white p-8 rounded-2xl max-w-sm w-full shadow-lg border border-slate-100">
+                  <div className="bg-rose-50 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 text-rose-500">
+                      <Lock size={24} />
                   </div>
-                  <h2 className="text-2xl font-black text-slate-800 mb-2">প্রবেশাধিকার নেই</h2>
-                  <p className="text-slate-500 mb-8 font-medium text-sm leading-relaxed">আপনার অ্যাকাউন্ট তৈরি হয়েছে কিন্তু কোনো রোল অ্যাসাইন করা হয়নি। অনুগ্রহ করে অ্যাডমিনের সাথে যোগাযোগ করুন।</p>
-                  <button onClick={() => signOut(auth)} className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-bold text-sm transition-all active:scale-[0.98]">লগ আউট</button>
+                  <h2 className="text-xl font-black text-slate-800 mb-2">প্রবেশাধিকার নেই</h2>
+                  <p className="text-slate-500 mb-6 text-xs font-bold">অ্যাকাউন্টে কোনো রোল নেই। অ্যাডমিনের সাথে যোগাযোগ করুন।</p>
+                  <button onClick={() => signOut(auth)} className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold text-xs">লগ আউট</button>
               </div>
           </div>
       );
   }
 
-  if (!user) {
-    return <LoginScreen />;
-  }
+  if (!user) return <LoginScreen />;
 
-  // AGENCY DASHBOARD VIEW
   if (user.role === 'agency') {
       return (
-          <div className="min-h-screen bg-slate-50 font-sans">
+          <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
               <AgencyDashboard user={user} tours={tours} refreshTours={fetchTours} handleLogout={handleLogout} />
           </div>
       );
   }
 
-  // NORMAL ADMIN/HOST VIEW
-  const commonProps = {
-      user,
-      allUsers,
-      tours,
-      refreshTours: fetchTours
-  };
+  const commonProps = { user, allUsers, tours, refreshTours: fetchTours };
 
   const renderContent = () => {
     switch (currentTab) {
@@ -196,34 +178,29 @@ const App = () => {
   };
 
   const navItems = [
-    { id: 'entry', label: 'ট্যুর এবং ইভেন্ট', icon: FolderPlus, adminOnly: false },
+    { id: 'entry', label: 'ট্যুর ইভেন্ট', icon: FolderPlus, adminOnly: false },
     { id: 'analysis', label: 'এনালাইসিস', icon: BarChart3, adminOnly: true },
     { id: 'personal', label: 'পার্সোনাল', icon: UserCircle, adminOnly: false },
     { id: 'share', label: 'পার্টনার', icon: Users, adminOnly: true },
     { id: 'final', label: 'ফাইনাল', icon: CheckSquare, adminOnly: true },
   ];
   
-  const filteredNavItems = navItems.filter(item => 
-    !item.adminOnly || user?.role === 'admin'
-  );
+  const filteredNavItems = navItems.filter(item => !item.adminOnly || user?.role === 'admin');
 
   return (
-      <div className="min-h-screen font-sans text-slate-900 flex">
-        {/* Desktop Sidebar */}
-        <aside className="hidden lg:flex flex-col w-72 h-screen sticky top-0 p-4">
-            <div className="flex-1 bg-white/80 backdrop-blur-2xl rounded-[2.5rem] shadow-2xl shadow-slate-200/50 border border-white/50 flex flex-col overflow-hidden">
-                <div className="p-8">
-                    <div className="flex items-center gap-3 mb-10">
-                        <div className="w-10 h-10 bg-gradient-to-tr from-violet-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-violet-500/30 text-white">
-                            <LayoutGrid size={20} />
+      <div className="min-h-screen font-sans text-slate-900 flex bg-slate-50">
+        {/* Compact Sidebar */}
+        <aside className="hidden lg:flex flex-col w-64 h-screen sticky top-0 p-3">
+            <div className="flex-1 bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl shadow-slate-200/50 border border-white/50 flex flex-col overflow-hidden">
+                <div className="p-6">
+                    <div className="flex items-center gap-2 mb-8">
+                        <div className="bg-slate-900 text-white p-2 rounded-lg">
+                            <LayoutGrid size={16} />
                         </div>
-                        <div>
-                            <h1 className="text-xl font-black text-slate-800 leading-none tracking-tight">পিটিটি<span className="text-violet-600">.</span></h1>
-                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">ম্যানেজার</span>
-                        </div>
+                        <h1 className="text-sm font-black text-slate-800 tracking-tight">পিটিটি ম্যানেজার</h1>
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                         {filteredNavItems.map(item => {
                             const Icon = item.icon;
                             const isActive = currentTab === item.id;
@@ -231,43 +208,32 @@ const App = () => {
                                 <button
                                     key={item.id}
                                     onClick={() => setCurrentTab(item.id as TabId)}
-                                    className={`w-full flex items-center gap-3 px-5 py-4 rounded-2xl transition-all duration-300 font-bold text-sm relative group overflow-hidden ${
+                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-xs font-bold ${
                                         isActive 
-                                        ? 'text-white shadow-xl shadow-violet-500/20' 
+                                        ? 'bg-slate-900 text-white shadow-lg shadow-slate-300' 
                                         : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
                                     }`}
                                 >
-                                    {isActive && (
-                                        <div className="absolute inset-0 bg-gradient-to-r from-violet-600 to-indigo-600"></div>
-                                    )}
-                                    <span className="relative z-10 flex items-center gap-3">
-                                        <Icon size={20} strokeWidth={isActive ? 2.5 : 2} className={isActive ? 'animate-pulse' : ''} />
-                                        {item.label}
-                                    </span>
+                                    <Icon size={16} strokeWidth={2} />
+                                    {item.label}
                                 </button>
                             )
                         })}
                     </div>
                 </div>
 
-                <div className="mt-auto p-6 bg-slate-50/50 border-t border-slate-100">
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className="w-10 h-10 rounded-full bg-white border border-slate-100 shadow-sm flex items-center justify-center text-slate-400 font-bold text-xs uppercase">
+                <div className="mt-auto p-4 border-t border-slate-100 bg-slate-50/50">
+                    <div className="flex items-center gap-3 mb-3">
+                        <div className="w-8 h-8 rounded-full bg-white border border-slate-100 flex items-center justify-center text-slate-400 text-[10px] font-bold">
                             {user.email.substring(0,2)}
                         </div>
                         <div className="overflow-hidden">
-                            <p className="font-bold text-slate-800 text-sm truncate">{user.email.split('@')[0]}</p>
-                            <div className="flex items-center gap-1">
-                                {user.role === 'admin' ? <ShieldCheck size={10} className="text-violet-600"/> : <Sparkles size={10} className="text-emerald-600"/>}
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{user.role}</p>
-                            </div>
+                            <p className="font-bold text-slate-800 text-xs truncate">{user.email.split('@')[0]}</p>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase">{user.role}</p>
                         </div>
                     </div>
-                    <button 
-                        onClick={handleLogout}
-                        className="w-full py-3 border border-slate-200 rounded-xl text-slate-500 text-xs font-bold hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all flex items-center justify-center gap-2"
-                    >
-                        <LogOut size={14} /> সাইন আউট
+                    <button onClick={handleLogout} className="w-full py-2 border border-slate-200 rounded-lg text-slate-500 text-[10px] font-bold hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all flex items-center justify-center gap-1.5">
+                        <LogOut size={12} /> সাইন আউট
                     </button>
                 </div>
             </div>
@@ -276,46 +242,26 @@ const App = () => {
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col min-h-screen">
             {/* Mobile Header */}
-            <header className="lg:hidden sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-slate-200/50">
-                <div className="px-5 py-4 flex justify-between items-center">
-                    <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 bg-gradient-to-tr from-slate-900 to-slate-800 rounded-xl flex items-center justify-center text-white shadow-lg shadow-slate-300">
-                            <LayoutGrid size={18} />
+            <header className="lg:hidden sticky top-0 z-40 bg-white/90 backdrop-blur-xl border-b border-slate-200">
+                <div className="px-4 py-3 flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                        <div className="bg-slate-900 text-white p-1.5 rounded-lg">
+                            <LayoutGrid size={16} />
                         </div>
-                        <h1 className="text-lg font-black text-slate-800 tracking-tight">পিটিটি ম্যানেজার</h1>
+                        <h1 className="text-sm font-black text-slate-800">পিটিটি ম্যানেজার</h1>
                     </div>
-                    <button 
-                        onClick={handleLogout}
-                        className="w-9 h-9 flex items-center justify-center rounded-full bg-slate-50 text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-colors"
-                    >
-                        <LogOut size={18} />
+                    <button onClick={handleLogout} className="p-2 bg-slate-50 rounded-lg text-slate-400">
+                        <LogOut size={16} />
                     </button>
                 </div>
             </header>
 
-            {/* Desktop Header Content (Contextual) */}
-            <header className="hidden lg:flex px-10 py-8 justify-between items-end">
-                 <div>
-                    <h2 className="text-3xl font-black text-slate-800 tracking-tight mb-1 animate-slide-up">
-                        {filteredNavItems.find(i => i.id === currentTab)?.label}
-                    </h2>
-                    <p className="text-slate-400 font-medium text-sm animate-fade-in delay-100">
-                        আপনার ট্রাভেল এজেন্সির কার্যক্রম সহজে পরিচালনা করুন।
-                    </p>
-                 </div>
-                 <div className="flex items-center gap-2 text-xs font-bold text-slate-400 bg-white px-4 py-2 rounded-full shadow-sm border border-slate-100">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    লাইভ সিস্টেম
-                 </div>
-            </header>
-
-            {/* Main Scrollable Content */}
-            <main className="flex-1 w-full max-w-7xl mx-auto px-4 lg:px-10 pb-24 lg:pb-10">
+            {/* Main Content */}
+            <main className="flex-1 w-full max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-8">
                 {renderContent()}
             </main>
         </div>
 
-        {/* Bottom Navigation (Mobile Only) */}
         <BottomNav currentTab={currentTab} setTab={setCurrentTab} user={user} />
       </div>
   );
