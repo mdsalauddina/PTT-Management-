@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
@@ -24,10 +23,6 @@ const LoginScreen = () => {
       const userDoc = await getDoc(userRef);
       
       if (!userDoc.exists()) {
-         // User exists in Auth but not in Firestore (No Role Assigned)
-         // We do NOT auto-create anymore based on requirements.
-         // The App component will handle the "No Role" state, 
-         // but here we can optionally show a warning or just let the App.tsx handle the UI
          console.warn("User logged in but has no profile in Firestore");
       } else {
           const timestamp = new Date().toISOString();
@@ -58,13 +53,13 @@ const LoginScreen = () => {
                 <div className="w-20 h-20 bg-gradient-to-tr from-violet-600 to-indigo-600 rounded-3xl flex items-center justify-center shadow-lg shadow-violet-500/30 mb-6 rotate-3 transform hover:rotate-6 transition-transform duration-300">
                     <ShieldCheck size={40} className="text-white" strokeWidth={1.5} />
                 </div>
-                <h1 className="text-3xl font-black text-slate-800 tracking-tight">PTT MANAGER</h1>
-                <p className="text-slate-500 text-sm font-medium mt-2">Sign in to your account</p>
+                <h1 className="text-3xl font-black text-slate-800 tracking-tight">পিটিটি ম্যানেজার</h1>
+                <p className="text-slate-500 text-sm font-medium mt-2">আপনার অ্যাকাউন্টে সাইন ইন করুন</p>
             </div>
             
             <form onSubmit={handleLogin} className="space-y-5">
                 <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-3">Email Address</label>
+                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-3">ইমেইল অ্যাড্রেস</label>
                     <div className="relative group">
                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                             <Mail className="h-5 w-5 text-slate-400 group-focus-within:text-violet-600 transition-colors" strokeWidth={1.5} />
@@ -81,7 +76,7 @@ const LoginScreen = () => {
                 </div>
 
                 <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-3">Password</label>
+                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-3">পাসওয়ার্ড</label>
                     <div className="relative group">
                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                             <Lock className="h-5 w-5 text-slate-400 group-focus-within:text-violet-600 transition-colors" strokeWidth={1.5} />
@@ -111,7 +106,7 @@ const LoginScreen = () => {
                 >
                     <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-violet-600 to-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                     <span className="relative flex items-center justify-center gap-2 uppercase tracking-wide text-sm">
-                        {loading ? 'Authenticating...' : <>Login <ArrowRight size={18} /></>}
+                        {loading ? 'যাচাই করা হচ্ছে...' : <>লগইন <ArrowRight size={18} /></>}
                     </span>
                 </button>
             </form>
@@ -119,7 +114,7 @@ const LoginScreen = () => {
             <div className="mt-8 flex flex-col items-center gap-3 opacity-60">
                  <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
                     <Sparkles size={12} className="text-violet-500"/>
-                    <span>Secure Access System</span>
+                    <span>সুরক্ষিত অ্যাক্সেস সিস্টেম</span>
                  </div>
             </div>
         </div>

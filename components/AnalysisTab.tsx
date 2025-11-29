@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps } from '../types';
 import { calculateBusFare } from '../utils/calculations';
@@ -118,7 +117,7 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours }) => {
             </div>
             <div className="relative z-10">
                 <p className="text-white/80 text-[10px] font-bold uppercase tracking-widest mb-2 flex items-center gap-2">
-                    <Activity size={12}/> নেট প্রফিট/লস
+                    <Activity size={12}/> নেট লাভ/ক্ষতি
                 </p>
                 <div className="flex items-center">
                     <span className="text-4xl font-black tracking-tighter">

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { auth, db } from './services/firebase';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
@@ -141,7 +140,7 @@ const App = () => {
                     <div className="absolute inset-0 border-4 border-slate-200 rounded-full"></div>
                     <div className="absolute inset-0 border-4 border-violet-600 rounded-full border-t-transparent animate-spin"></div>
                 </div>
-                <p className="mt-6 text-slate-500 font-bold text-xs uppercase tracking-[0.2em] animate-pulse">Initializing...</p>
+                <p className="mt-6 text-slate-500 font-bold text-xs uppercase tracking-[0.2em] animate-pulse">লোড হচ্ছে...</p>
             </div>
         </div>
     );
@@ -156,9 +155,9 @@ const App = () => {
                   <div className="bg-rose-50 w-20 h-20 rounded-3xl rotate-3 flex items-center justify-center mx-auto mb-6 text-rose-500 shadow-lg shadow-rose-200">
                       <Lock size={32} />
                   </div>
-                  <h2 className="text-2xl font-black text-slate-800 mb-2">Access Denied</h2>
-                  <p className="text-slate-500 mb-8 font-medium text-sm leading-relaxed">Your account has been created but no specific role has been assigned yet. Please contact the administrator.</p>
-                  <button onClick={() => signOut(auth)} className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-bold text-sm transition-all active:scale-[0.98]">Log Out</button>
+                  <h2 className="text-2xl font-black text-slate-800 mb-2">প্রবেশাধিকার নেই</h2>
+                  <p className="text-slate-500 mb-8 font-medium text-sm leading-relaxed">আপনার অ্যাকাউন্ট তৈরি হয়েছে কিন্তু কোনো রোল অ্যাসাইন করা হয়নি। অনুগ্রহ করে অ্যাডমিনের সাথে যোগাযোগ করুন।</p>
+                  <button onClick={() => signOut(auth)} className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-bold text-sm transition-all active:scale-[0.98]">লগ আউট</button>
               </div>
           </div>
       );
@@ -197,11 +196,11 @@ const App = () => {
   };
 
   const navItems = [
-    { id: 'entry', label: 'Tours & Events', icon: FolderPlus, adminOnly: false },
-    { id: 'analysis', label: 'Analysis', icon: BarChart3, adminOnly: true },
-    { id: 'personal', label: 'My Bookings', icon: UserCircle, adminOnly: false },
-    { id: 'share', label: 'Partners', icon: Users, adminOnly: true },
-    { id: 'final', label: 'Final Report', icon: CheckSquare, adminOnly: true },
+    { id: 'entry', label: 'ট্যুর এবং ইভেন্ট', icon: FolderPlus, adminOnly: false },
+    { id: 'analysis', label: 'এনালাইসিস', icon: BarChart3, adminOnly: true },
+    { id: 'personal', label: 'পার্সোনাল', icon: UserCircle, adminOnly: false },
+    { id: 'share', label: 'পার্টনার', icon: Users, adminOnly: true },
+    { id: 'final', label: 'ফাইনাল', icon: CheckSquare, adminOnly: true },
   ];
   
   const filteredNavItems = navItems.filter(item => 
@@ -219,8 +218,8 @@ const App = () => {
                             <LayoutGrid size={20} />
                         </div>
                         <div>
-                            <h1 className="text-xl font-black text-slate-800 leading-none tracking-tight">PTT<span className="text-violet-600">.</span></h1>
-                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Manager</span>
+                            <h1 className="text-xl font-black text-slate-800 leading-none tracking-tight">পিটিটি<span className="text-violet-600">.</span></h1>
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">ম্যানেজার</span>
                         </div>
                     </div>
 
@@ -268,7 +267,7 @@ const App = () => {
                         onClick={handleLogout}
                         className="w-full py-3 border border-slate-200 rounded-xl text-slate-500 text-xs font-bold hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all flex items-center justify-center gap-2"
                     >
-                        <LogOut size={14} /> Sign Out
+                        <LogOut size={14} /> সাইন আউট
                     </button>
                 </div>
             </div>
@@ -283,7 +282,7 @@ const App = () => {
                         <div className="w-9 h-9 bg-gradient-to-tr from-slate-900 to-slate-800 rounded-xl flex items-center justify-center text-white shadow-lg shadow-slate-300">
                             <LayoutGrid size={18} />
                         </div>
-                        <h1 className="text-lg font-black text-slate-800 tracking-tight">PTT Manager</h1>
+                        <h1 className="text-lg font-black text-slate-800 tracking-tight">পিটিটি ম্যানেজার</h1>
                     </div>
                     <button 
                         onClick={handleLogout}
@@ -301,12 +300,12 @@ const App = () => {
                         {filteredNavItems.find(i => i.id === currentTab)?.label}
                     </h2>
                     <p className="text-slate-400 font-medium text-sm animate-fade-in delay-100">
-                        Manage your travel agency operations seamlessly.
+                        আপনার ট্রাভেল এজেন্সির কার্যক্রম সহজে পরিচালনা করুন।
                     </p>
                  </div>
                  <div className="flex items-center gap-2 text-xs font-bold text-slate-400 bg-white px-4 py-2 rounded-full shadow-sm border border-slate-100">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    Live System
+                    লাইভ সিস্টেম
                  </div>
             </header>
 

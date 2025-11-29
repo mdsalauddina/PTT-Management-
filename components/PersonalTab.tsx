@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, PersonalData } from '../types';
 import { db } from '../services/firebase';
@@ -146,8 +145,8 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
 
       <div className="flex justify-between items-center bg-white/60 backdrop-blur-md p-4 rounded-[1.5rem] shadow-sm border border-slate-100 sticky top-0 z-10">
         <div>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Action</p>
-            <h2 className="font-bold text-slate-700 text-sm">Update & Save</h2>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">একশন</p>
+            <h2 className="font-bold text-slate-700 text-sm">আপডেট ও সেভ</h2>
         </div>
         <button 
             onClick={handleSave} 
@@ -160,7 +159,7 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
       {/* Guest Counters */}
       <div className="bg-slate-50/50 p-6 rounded-[2rem] border border-slate-200/50">
         <h3 className="text-xs font-bold text-slate-500 mb-6 uppercase tracking-widest flex items-center gap-2">
-            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full"></span> আমার গেস্ট (Own Guests)
+            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full"></span> আমার গেস্ট
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <CounterControl label="রেগুলার গেস্ট" value={personalData.personalStandardCount} field="personalStandardCount" />
@@ -173,7 +172,7 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
       <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
         <div className="flex justify-between items-center mb-6">
             <h3 className="text-xs font-bold text-orange-600 uppercase tracking-widest flex items-center gap-2">
-                <div className="p-1.5 bg-orange-100 rounded-lg"><Receipt size={14} /></div> আমি খরচ করেছি
+                <div className="p-1.5 bg-orange-100 rounded-lg"><Receipt size={14} /></div> আমার খরচ
             </h3>
             <button 
                 onClick={addExpense} 
@@ -230,7 +229,7 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
           <div className="relative p-8 text-white">
             <div className="flex justify-between items-center mb-8 border-b border-white/10 pb-6">
                 <div>
-                    <p className="text-[10px] text-white/60 uppercase tracking-widest mb-1 font-bold">PERSONAL BALANCE</p>
+                    <p className="text-[10px] text-white/60 uppercase tracking-widest mb-1 font-bold">ব্যক্তিগত ব্যালেন্স</p>
                     <h3 className="text-xl font-black tracking-tight">হিসাব বিবরণী</h3>
                 </div>
                 <div className="bg-white/10 p-3 rounded-2xl backdrop-blur-md border border-white/10">

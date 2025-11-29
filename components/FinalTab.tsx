@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, Guest } from '../types';
 import { CheckCircle, AlertTriangle, TrendingUp, Users, DollarSign, Wallet, ChevronDown, Activity, ArrowRight, PieChart } from 'lucide-react';
@@ -77,7 +76,7 @@ const FinalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
         <div className="relative z-10">
             <div className="flex justify-between items-start">
                 <div>
-                    <h2 className="text-3xl font-black tracking-tighter mb-1">Net Operation Result</h2>
+                    <h2 className="text-3xl font-black tracking-tighter mb-1">নেট অপারেশন রেজাল্ট</h2>
                     <p className="opacity-80 text-xs font-bold tracking-widest uppercase flex items-center gap-2">
                          {activeTour.name} <span className="w-1 h-1 bg-white rounded-full"></span> {activeTour.date}
                     </p>
@@ -96,7 +95,7 @@ const FinalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
                 </div>
                 <div className={`inline-flex items-center px-5 py-2.5 rounded-2xl text-xs mt-6 font-bold shadow-lg backdrop-blur-md border transition-all hover:scale-105 ${netOperation >= 0 ? 'bg-emerald-400/20 text-emerald-50 border-emerald-400/30' : 'bg-rose-900/20 text-rose-50 border-rose-400/30'}`}>
                     {netOperation >= 0 ? <CheckCircle size={16} className="mr-2"/> : <AlertTriangle size={16} className="mr-2"/>}
-                    {netOperation >= 0 ? 'Profitable Event' : 'Loss Making Event'}
+                    {netOperation >= 0 ? 'লাভজনক ইভেন্ট' : 'লোকসানি ইভেন্ট'}
                 </div>
             </div>
         </div>
@@ -117,7 +116,7 @@ const FinalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
           </div>
           <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col items-center justify-center text-center md:col-span-2 group hover:shadow-md transition-all">
              <div className="bg-emerald-50 p-4 rounded-2xl text-emerald-600 mb-4 group-hover:scale-110 transition-transform"><DollarSign size={24}/></div>
-             <p className="text-slate-400 text-[10px] uppercase font-bold tracking-widest">মোট কালেকশন (Revenue)</p>
+             <p className="text-slate-400 text-[10px] uppercase font-bold tracking-widest">মোট কালেকশন</p>
              <p className="text-4xl font-black text-slate-800 mt-2">৳ {totalCollection.toLocaleString()}</p>
           </div>
       </div>
@@ -128,15 +127,15 @@ const FinalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
           </div>
           <div className="p-6 space-y-4 text-sm">
               <div className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors">
-                  <span className="text-slate-500 font-bold text-xs uppercase">বাস ভাড়া (Fixed)</span>
+                  <span className="text-slate-500 font-bold text-xs uppercase">বাস ভাড়া (ফিক্সড)</span>
                   <span className="font-mono font-bold text-slate-700">৳ {Number(activeTour.busConfig?.totalRent || 0).toLocaleString()}</span>
               </div>
               <div className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors">
-                  <span className="text-slate-500 font-bold text-xs uppercase">হোস্ট ফি (Salary)</span>
+                  <span className="text-slate-500 font-bold text-xs uppercase">হোস্ট ফি (স্যালারি)</span>
                   <span className="font-mono font-bold text-slate-700">৳ {Number(activeTour.costs?.hostFee || 0).toLocaleString()}</span>
               </div>
               <div className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors">
-                  <span className="text-slate-500 font-bold text-xs uppercase">খাবার ও লোকাল ট্রান্সপোর্ট (Variable)</span>
+                  <span className="text-slate-500 font-bold text-xs uppercase">খাবার ও লোকাল ট্রান্সপোর্ট</span>
                   <span className="font-mono font-bold text-slate-700">৳ {totalDailyExpenses.toLocaleString()}</span>
               </div>
               <div className="h-px bg-slate-100 my-2"></div>
