@@ -1,9 +1,11 @@
+
+
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, PartnerAgency, Guest } from '../types';
 import { db } from '../services/firebase';
 import { doc, updateDoc, Timestamp } from 'firebase/firestore';
 import { calculateAgencySettlement, safeNum } from '../utils/calculations';
-import { Users, Phone, Plus, Trash, ChevronDown, ChevronUp, UserPlus, Briefcase, Calculator, Mail, Star, Edit3, X, Check, FolderOpen } from 'lucide-react';
+import { Users, Phone, Plus, Trash, ChevronDown, ChevronUp, UserPlus, Briefcase, Calculator, Mail, Star, Edit3, X, Check, FolderOpen, Armchair } from 'lucide-react';
 
 const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) => {
   const [selectedTourId, setSelectedTourId] = useState<string>('');
@@ -11,7 +13,7 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
   const [newAgency, setNewAgency] = useState({ name: '', phone: '', email: '' });
   const [expandedAgency, setExpandedAgency] = useState<string | null>(null);
 
-  const [newBooking, setNewBooking] = useState({ name: '', phone: '', seatCount: '', unitPrice: '' });
+  const [newBooking, setNewBooking] = useState({ name: '', phone: '', seatCount: '', unitPrice: '', seatNumbers: '' });
   const [isAddingBooking, setIsAddingBooking] = useState<string | null>(null);
   
   const [editingGuest, setEditingGuest] = useState<{ agencyId: string, guestId: string } | null>(null);
@@ -25,8 +27,11 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
 
   const activeTour = tours.find(t => t.id === selectedTourId) || null;
 
-  if (user.role !== 'admin') return <div className="h-full flex items-center justify-center text-rose-400 font-bold p-10 bg-rose-50 m-4 rounded-3xl border border-rose-100">Restricted Access: Admin Only</div>;
+  // Hosts can see this tab now, but limited view
+  if (user.role !== 'admin' && user.role !== 'host') return <div className="h-full flex items-center justify-center text-rose-400 font-bold p-10 bg-rose-50 m-4 rounded-3xl border border-rose-100">Restricted Access: Admin/Host Only</div>;
   
+  const isAdmin = user.role === 'admin';
+
   if (!activeTour) return (
     <div className="h-full flex flex-col items-center justify-center p-20 text-center text-slate-400">
         <div className="bg-slate-100 p-8 rounded-full mb-6 animate-pulse"><Users size={32} /></div>
@@ -85,6 +90,7 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
           name: newBooking.name,
           phone: newBooking.phone || '',
           seatCount: seatCount,
+          seatNumbers: newBooking.seatNumbers,
           unitPrice: unitPrice, 
           collection: seatCount * unitPrice, 
           seatType: 'regular',
@@ -99,7 +105,7 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
       agencies[agencyIndex] = { ...agencies[agencyIndex], guests: currentGuests };
       
       await updateTourAgencies(agencies);
-      setNewBooking({ name: '', phone: '', seatCount: '', unitPrice: '' });
+      setNewBooking({ name: '', phone: '', seatCount: '', unitPrice: '', seatNumbers: '' });
       setIsAddingBooking(null);
   };
 
@@ -198,9 +204,11 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
             <h2 className="font-bold text-slate-800 text-sm">পার্টনার তালিকা</h2>
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Active Collaboration</p>
         </div>
-        <button onClick={() => setShowAddAgency(true)} className="bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs flex items-center font-bold shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all active:scale-95 uppercase tracking-wide">
-            <Plus size={14} className="mr-2"/> পার্টনার যোগ করুন
-        </button>
+        {isAdmin && (
+            <button onClick={() => setShowAddAgency(true)} className="bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs flex items-center font-bold shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all active:scale-95 uppercase tracking-wide">
+                <Plus size={14} className="mr-2"/> পার্টনার যোগ করুন
+            </button>
+        )}
       </div>
 
       {showAddAgency && (
@@ -253,12 +261,15 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
                           </div>
                       </div>
                       <div className="flex items-center gap-4">
-                          <div className="text-right hidden sm:block bg-white px-4 py-2 rounded-xl border border-slate-100 shadow-sm">
-                              <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">সেটেলমেন্ট</p>
-                              <p className={`text-sm font-black ${settlement.netAmount >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                  {settlement.netAmount >= 0 ? '+' : ''}{settlement.netAmount.toLocaleString()} ৳
-                              </p>
-                          </div>
+                          {/* Financial Summary hidden for Hosts */}
+                          {isAdmin && (
+                            <div className="text-right hidden sm:block bg-white px-4 py-2 rounded-xl border border-slate-100 shadow-sm">
+                                <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">সেটেলমেন্ট</p>
+                                <p className={`text-sm font-black ${settlement.netAmount >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                    {settlement.netAmount >= 0 ? '+' : ''}{settlement.netAmount.toLocaleString()} ৳
+                                </p>
+                            </div>
+                          )}
                           <div className={`p-2 rounded-full transition-transform duration-300 ${isExpanded ? 'rotate-180 bg-violet-100 text-violet-600' : 'bg-slate-50 text-slate-400'}`}>
                             <ChevronDown size={20}/>
                           </div>
@@ -267,27 +278,29 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
 
                   {isExpanded && (
                     <div className="p-6 animate-fade-in bg-slate-50/30">
-                        {/* Summary Grid */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                            <div className="bg-white p-4 rounded-2xl border border-slate-100 text-center shadow-sm">
-                                <p className="text-[9px] text-slate-400 font-bold uppercase mb-1">সিট</p>
-                                <p className="text-2xl font-black text-slate-800">{settlement.totalSeats}</p>
+                        {/* Summary Grid - Only for Admin */}
+                        {isAdmin && (
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                                <div className="bg-white p-4 rounded-2xl border border-slate-100 text-center shadow-sm">
+                                    <p className="text-[9px] text-slate-400 font-bold uppercase mb-1">সিট</p>
+                                    <p className="text-2xl font-black text-slate-800">{settlement.totalSeats}</p>
+                                </div>
+                                <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100 text-center">
+                                    <p className="text-[9px] text-orange-600 font-bold uppercase mb-1">বাই রেট</p>
+                                    <p className="text-xl font-black text-orange-700">৳{settlement.rates.regular.toLocaleString()}</p>
+                                </div>
+                                <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 text-center">
+                                    <p className="text-[9px] text-emerald-600 font-bold uppercase mb-1">হোস্ট পাবে</p>
+                                    <p className="text-xl font-black text-emerald-700">৳{settlement.totalCollection.toLocaleString()}</p>
+                                </div>
+                                <div className={`p-4 rounded-2xl border text-center ${settlement.netAmount >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-rose-50 border-rose-100'}`}>
+                                    <p className={`text-[9px] font-bold uppercase mb-1 ${settlement.netAmount >= 0 ? 'text-blue-600' : 'text-rose-600'}`}>
+                                        {settlement.netAmount >= 0 ? 'দিতে হবে' : 'পাবে'}
+                                    </p>
+                                    <p className={`text-xl font-black ${settlement.netAmount >= 0 ? 'text-blue-700' : 'text-rose-700'}`}>৳{Math.abs(settlement.netAmount).toLocaleString()}</p>
+                                </div>
                             </div>
-                            <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100 text-center">
-                                <p className="text-[9px] text-orange-600 font-bold uppercase mb-1">বাই রেট</p>
-                                <p className="text-xl font-black text-orange-700">৳{settlement.rates.regular.toLocaleString()}</p>
-                            </div>
-                            <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 text-center">
-                                <p className="text-[9px] text-emerald-600 font-bold uppercase mb-1">হোস্ট পাবে</p>
-                                <p className="text-xl font-black text-emerald-700">৳{settlement.totalCollection.toLocaleString()}</p>
-                            </div>
-                             <div className={`p-4 rounded-2xl border text-center ${settlement.netAmount >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-rose-50 border-rose-100'}`}>
-                                <p className={`text-[9px] font-bold uppercase mb-1 ${settlement.netAmount >= 0 ? 'text-blue-600' : 'text-rose-600'}`}>
-                                    {settlement.netAmount >= 0 ? 'দিতে হবে' : 'পাবে'}
-                                </p>
-                                <p className={`text-xl font-black ${settlement.netAmount >= 0 ? 'text-blue-700' : 'text-rose-700'}`}>৳{Math.abs(settlement.netAmount).toLocaleString()}</p>
-                            </div>
-                        </div>
+                        )}
 
                         {/* Guest List Container */}
                         <div className="bg-white rounded-[1.75rem] border border-slate-200 overflow-hidden shadow-sm">
@@ -295,9 +308,11 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
                                 <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
                                     <Users size={14}/> বুকিং লিস্ট
                                 </h4>
-                                <button onClick={() => setIsAddingBooking(agency.id)} className="text-violet-700 text-[10px] bg-violet-50 px-3 py-1.5 rounded-lg border border-violet-100 flex items-center font-bold hover:bg-violet-100 transition-all uppercase tracking-wide">
-                                    <UserPlus size={12} className="mr-1.5" /> গেস্ট যোগ করুন
-                                </button>
+                                {isAdmin && (
+                                    <button onClick={() => setIsAddingBooking(agency.id)} className="text-violet-700 text-[10px] bg-violet-50 px-3 py-1.5 rounded-lg border border-violet-100 flex items-center font-bold hover:bg-violet-100 transition-all uppercase tracking-wide">
+                                        <UserPlus size={12} className="mr-1.5" /> গেস্ট যোগ করুন
+                                    </button>
+                                )}
                             </div>
                             
                             {isAddingBooking === agency.id && (
@@ -318,6 +333,10 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
                                         <div>
                                             <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">কালেকশন</label>
                                             <input type="number" className="w-full border border-emerald-200 bg-emerald-50 p-3 rounded-xl text-sm outline-none font-bold text-center text-emerald-700 focus:ring-2 focus:ring-emerald-500" placeholder="0" value={newBooking.unitPrice} onChange={e => setNewBooking({...newBooking, unitPrice: e.target.value})} />
+                                        </div>
+                                        <div className="col-span-2">
+                                            <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">সিট নম্বর</label>
+                                            <input className="w-full border border-slate-200 bg-white p-3 rounded-xl text-sm outline-none font-semibold focus:ring-2 focus:ring-violet-500" placeholder="A1, A2, B3..." value={newBooking.seatNumbers} onChange={e => setNewBooking({...newBooking, seatNumbers: e.target.value})} />
                                         </div>
                                     </div>
                                     <div className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200">
@@ -372,7 +391,16 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
                                                         <span className="text-[10px] text-slate-400 font-medium flex items-center gap-1"><Phone size={10}/> {guest.phone || 'N/A'}</span>
                                                         <div className="w-1 h-1 rounded-full bg-slate-200"></div>
                                                         <span className="text-[10px] text-slate-500 font-bold">{guest.seatCount || 1} সিট</span>
-                                                        <span className="text-[10px] text-slate-400">@ ৳{guest.unitPrice || 0}</span>
+                                                        {guest.seatNumbers && (
+                                                            <>
+                                                                <div className="w-1 h-1 rounded-full bg-slate-200"></div>
+                                                                <span className="text-[10px] text-violet-600 font-bold bg-violet-50 px-1.5 rounded border border-violet-100 flex items-center gap-1">
+                                                                    <Armchair size={10}/> {guest.seatNumbers}
+                                                                </span>
+                                                            </>
+                                                        )}
+                                                        {/* Hide unit price for Host */}
+                                                        {isAdmin && <span className="text-[10px] text-slate-400">@ ৳{guest.unitPrice || 0}</span>}
                                                     </div>
                                                 </div>
                                                 
@@ -383,7 +411,7 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
                                                     </div>
 
                                                     <div className="flex items-center gap-1">
-                                                        {!isEditing && (
+                                                        {isAdmin && !isEditing && (
                                                             <>
                                                                 <button 
                                                                     type="button"

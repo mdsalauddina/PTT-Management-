@@ -1,28 +1,30 @@
+
+
 import React, { useState, useEffect } from 'react';
 import { db } from '../services/firebase';
 import { collection, addDoc, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { Tour, CommonTabProps, BusConfig, DailyExpense } from '../types';
-import { Plus, Edit2, Calendar, DollarSign, Bus, Check, Settings, MapPin, Save, ArrowLeft, Trash2, Clock, Utensils, UserPlus, User, Key, Loader, AlertTriangle, MoreHorizontal } from 'lucide-react';
+import { Plus, Edit2, Calendar, DollarSign, Bus, Check, Settings, MapPin, Save, ArrowLeft, Trash2, Clock, Utensils, UserPlus, User, Key, Loader, AlertTriangle, MoreHorizontal, Building, Coffee } from 'lucide-react';
 import { calculateBusFare } from '../utils/calculations';
 
 // UI Helpers
 const Card = ({ children, className = "" }: { children?: React.ReactNode, className?: string }) => (
-  <div className={`bg-white rounded-[1.75rem] shadow-sm border border-slate-100 ${className}`}>
+  <div className={`bg-white rounded-[1.75rem] shadow-glass border border-white/60 ${className}`}>
       {children}
   </div>
 );
 
 const SectionHeader = ({ icon: Icon, title, color = "text-slate-800" }: any) => (
-    <div className="flex items-center gap-2 mb-6">
-        <div className={`p-2 rounded-lg ${color.replace('text-', 'bg-').replace('700', '50').replace('800', '50')} ${color}`}>
-          <Icon size={16} />
+    <div className="flex items-center gap-2 mb-6 border-b border-slate-100 pb-4">
+        <div className={`p-2.5 rounded-xl ${color.replace('text-', 'bg-').replace('700', '50').replace('800', '50')} ${color} shadow-sm`}>
+          <Icon size={18} />
         </div>
         <h3 className={`text-sm font-bold uppercase tracking-widest ${color}`}>{title}</h3>
     </div>
 );
 
 const InputGroup = ({ label, children }: any) => (
-    <div className="space-y-1.5">
+    <div className="space-y-2">
         <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">{label}</label>
         {children}
     </div>
@@ -31,7 +33,7 @@ const InputGroup = ({ label, children }: any) => (
 const StyledInput = (props: any) => (
     <input 
       {...props}
-      className={`w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 outline-none focus:bg-white focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-all placeholder:text-slate-300 ${props.className || ''}`} 
+      className={`w-full px-4 py-3.5 bg-slate-50 border border-slate-200/80 rounded-xl text-sm font-semibold text-slate-700 outline-none focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all placeholder:text-slate-300 shadow-sm ${props.className || ''}`} 
     />
 );
 
@@ -61,6 +63,7 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
     costs: {
       perHead: 1000,
       hostFee: 0,
+      hotelCost: 0,
       dailyExpenses: []
     }
   };
@@ -74,7 +77,7 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
           const currentExpenses = prev.costs?.dailyExpenses || [];
           let newExpenses: DailyExpense[] = [];
           for (let i = 0; i < currentDuration; i++) {
-              newExpenses.push(currentExpenses[i] || { day: i + 1, breakfast: 0, lunch: 0, dinner: 0, transport: 0 });
+              newExpenses.push(currentExpenses[i] || { day: i + 1, breakfast: 0, lunch: 0, dinner: 0, transport: 0, other: 0 });
           }
           return { ...prev, costs: { ...prev.costs!, dailyExpenses: newExpenses } };
       });
@@ -134,8 +137,17 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
       setIsSubmitting(true);
       try {
           const tourRef = doc(db, 'tours', targetId);
-          const cleanData = sanitizeData(tourData, true);
-          const updateData = { ...cleanData, updatedAt: Timestamp.now() };
+          // If User is Host, only update daily expenses
+          let updateData;
+          if (user.role === 'host') {
+             updateData = {
+                 'costs.dailyExpenses': tourData.costs?.dailyExpenses,
+                 updatedAt: Timestamp.now()
+             };
+          } else {
+             const cleanData = sanitizeData(tourData, true);
+             updateData = { ...cleanData, updatedAt: Timestamp.now() };
+          }
           
           await updateDoc(tourRef, updateData);
           await refreshTours();
@@ -210,6 +222,8 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
       return host ? host.email : uid.substring(0, 8) + '...';
   };
 
+  const isAdmin = user.role === 'admin';
+
   return (
     <div className="animate-fade-in">
       {!isCreating ? (
@@ -221,7 +235,7 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
             <div className="lg:hidden">
                 <h2 className="text-xl font-black text-slate-800 tracking-tight">ট্যুর এবং ইভেন্ট</h2>
             </div>
-            {user.role === 'admin' && (
+            {isAdmin && (
               <button 
                 type="button"
                 onClick={() => { resetForm(); setIsCreating(true); }}
@@ -258,27 +272,27 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
                                 <span className="bg-white/20 backdrop-blur-md border border-white/20 text-white px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider">
                                     {tour.date}
                                 </span>
-                                {user.role === 'admin' && (
-                                    <div className="flex gap-1">
-                                        <button 
-                                            onClick={(e) => { 
-                                                e.stopPropagation(); 
-                                                setActiveTour(tour); 
-                                                setTourData(tour); 
-                                                setIsCreating(true); 
-                                            }}
-                                            className="p-2 bg-white/20 hover:bg-white text-white hover:text-slate-900 rounded-lg backdrop-blur-md transition-all"
-                                        >
-                                            <Edit2 size={14} />
-                                        </button>
+                                <div className="flex gap-1">
+                                    <button 
+                                        onClick={(e) => { 
+                                            e.stopPropagation(); 
+                                            setActiveTour(tour); 
+                                            setTourData(tour); 
+                                            setIsCreating(true); 
+                                        }}
+                                        className="p-2 bg-white/20 hover:bg-white text-white hover:text-slate-900 rounded-lg backdrop-blur-md transition-all"
+                                    >
+                                        <Edit2 size={14} />
+                                    </button>
+                                    {isAdmin && (
                                         <button 
                                             onClick={(e) => handleDelete(e, tour.id)}
                                             className="p-2 bg-white/20 hover:bg-rose-500 text-white rounded-lg backdrop-blur-md transition-all"
                                         >
                                             <Trash2 size={14} />
                                         </button>
-                                    </div>
-                                )}
+                                    )}
+                                </div>
                              </div>
                              <h3 className="text-white font-black text-xl tracking-tight leading-tight line-clamp-1 drop-shadow-md">
                                 {tour.name}
@@ -302,16 +316,25 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
                           )}
                       </div>
 
-                      <div className="mt-auto grid grid-cols-2 gap-3 pt-2">
-                          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 text-center group-hover:bg-slate-100 transition-colors">
-                              <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider mb-1">বাস ভাড়া</p>
-                              <p className="font-black text-slate-700">৳{Number(tour.busConfig?.totalRent || 0).toLocaleString()}</p>
-                          </div>
-                          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 text-center group-hover:bg-slate-100 transition-colors">
-                              <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider mb-1">হোস্ট ফি</p>
-                              <p className="font-black text-slate-700">৳{Number(tour.costs?.hostFee || 0).toLocaleString()}</p>
-                          </div>
-                      </div>
+                      {isAdmin && (
+                        <div className="mt-auto grid grid-cols-2 gap-3 pt-2">
+                            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 text-center group-hover:bg-slate-100 transition-colors">
+                                <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider mb-1">বাস ভাড়া</p>
+                                <p className="font-black text-slate-700">৳{Number(tour.busConfig?.totalRent || 0).toLocaleString()}</p>
+                            </div>
+                            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 text-center group-hover:bg-slate-100 transition-colors">
+                                <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider mb-1">হোটেল খরচ</p>
+                                <p className="font-black text-slate-700">৳{Number(tour.costs?.hotelCost || 0).toLocaleString()}</p>
+                            </div>
+                        </div>
+                      )}
+                      {!isAdmin && (
+                         <div className="mt-auto pt-2">
+                             <div className="bg-violet-50 p-3 rounded-2xl border border-violet-100 text-center">
+                                 <p className="text-[10px] text-violet-600 uppercase font-bold tracking-wider">হোস্ট প্যানেল</p>
+                             </div>
+                         </div>
+                      )}
                   </div>
                 </div>
               );
@@ -339,7 +362,9 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
                     <h2 className="font-bold text-slate-800 text-lg">
                         {activeTour?.id || tourData.id ? 'ট্যুর আপডেট করুন' : 'নতুন ট্যুর ইভেন্ট'}
                     </h2>
-                    <p className="text-xs text-slate-400 font-medium">নিচের তথ্যগুলো পূরণ করুন</p>
+                    <p className="text-xs text-slate-400 font-medium">
+                        {isAdmin ? 'নিচের তথ্যগুলো পূরণ করুন' : 'খরচ আপডেট করুন'}
+                    </p>
                 </div>
             </div>
             <div className="flex items-center gap-2">
@@ -356,8 +381,9 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
           </div>
           
           <form id="tour-form" onSubmit={activeTour?.id || tourData.id ? handleUpdate : handleSubmit} className="space-y-8">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* LEFT COLUMN */}
+            <div className={`grid gap-8 ${isAdmin ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
+                {/* LEFT COLUMN - Hidden for Host */}
+                {isAdmin && (
                 <div className="space-y-8">
                     <Card className="p-8">
                         <SectionHeader icon={MapPin} title="প্রাথমিক তথ্য" color="text-violet-700" />
@@ -366,40 +392,38 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
                                 <StyledInput required placeholder="যেমন: কক্সবাজার ভ্রমণ" value={tourData.name} onChange={(e: any) => setTourData({...tourData, name: e.target.value})} />
                             </InputGroup>
                             
-                            {user.role === 'admin' && (
-                                <div className="p-5 bg-violet-50/50 rounded-2xl border border-violet-100/50">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1 flex items-center gap-1">
-                                            <UserPlus size={10} /> অ্যাসাইন করা হোস্ট
-                                        </label>
-                                        <button type="button" onClick={() => setUseManualHostId(!useManualHostId)} className="text-[9px] text-violet-600 font-bold hover:underline bg-white px-2 py-1 rounded shadow-sm border border-violet-100">
-                                            {useManualHostId ? 'লিস্ট থেকে বাছাই করুন' : 'আইডি লিখুন'}
-                                        </button>
-                                    </div>
-                                    
-                                    {useManualHostId ? (
-                                        <StyledInput placeholder="হোস্টের UID পেস্ট করুন..." value={tourData.assignedHostId || ''} onChange={(e: any) => setTourData({...tourData, assignedHostId: e.target.value})} className="font-mono text-xs"/>
-                                    ) : (
-                                        <div className="relative">
-                                            <select 
-                                                value={tourData.assignedHostId || ''} 
-                                                onChange={e => setTourData({...tourData, assignedHostId: e.target.value})}
-                                                className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-violet-500/50 appearance-none cursor-pointer"
-                                            >
-                                                <option value="">-- হোস্ট নির্বাচন করুন --</option>
-                                                {availableHosts.map(host => (
-                                                    <option key={host.uid} value={host.uid}>
-                                                        {host.email} ({host.role})
-                                                    </option>
-                                                ))}
-                                            </select>
-                                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                                                <Settings size={16} />
-                                            </div>
-                                        </div>
-                                    )}
+                            <div className="p-5 bg-violet-50/50 rounded-2xl border border-violet-100/50">
+                                <div className="flex justify-between items-center mb-2">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1 flex items-center gap-1">
+                                        <UserPlus size={10} /> অ্যাসাইন করা হোস্ট
+                                    </label>
+                                    <button type="button" onClick={() => setUseManualHostId(!useManualHostId)} className="text-[9px] text-violet-600 font-bold hover:underline bg-white px-2 py-1 rounded shadow-sm border border-violet-100">
+                                        {useManualHostId ? 'লিস্ট থেকে বাছাই করুন' : 'আইডি লিখুন'}
+                                    </button>
                                 </div>
-                            )}
+                                
+                                {useManualHostId ? (
+                                    <StyledInput placeholder="হোস্টের UID পেস্ট করুন..." value={tourData.assignedHostId || ''} onChange={(e: any) => setTourData({...tourData, assignedHostId: e.target.value})} className="font-mono text-xs"/>
+                                ) : (
+                                    <div className="relative">
+                                        <select 
+                                            value={tourData.assignedHostId || ''} 
+                                            onChange={e => setTourData({...tourData, assignedHostId: e.target.value})}
+                                            className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-violet-500/50 appearance-none cursor-pointer"
+                                        >
+                                            <option value="">-- হোস্ট নির্বাচন করুন --</option>
+                                            {availableHosts.map(host => (
+                                                <option key={host.uid} value={host.uid}>
+                                                    {host.email} ({host.role})
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                            <Settings size={16} />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <InputGroup label="শুরুর তারিখ">
@@ -428,19 +452,26 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
                         </div>
                     </Card>
                 </div>
+                )}
 
                 {/* RIGHT COLUMN */}
                 <div className="space-y-8">
+                    {isAdmin && (
                     <Card className="p-8">
-                        <SectionHeader icon={Bus} title="ফিক্সড খরচ ও বাস কনফিগ" color="text-rose-700" />
+                        <SectionHeader icon={Building} title="ফিক্সড খরচ (বাস ও হোটেল)" color="text-rose-700" />
                         
                         <div className="grid grid-cols-2 gap-5 mb-6">
                             <InputGroup label="মোট বাস ভাড়া">
                                 <StyledInput type="number" className="font-bold text-rose-700 bg-rose-50/30 border-rose-100 focus:border-rose-500 focus:ring-rose-200" value={tourData.busConfig?.totalRent} onChange={(e: any) => setTourData({...tourData, busConfig: {...tourData.busConfig!, totalRent: safeNumInput(e)}})} />
                             </InputGroup>
-                            <InputGroup label="হোস্ট ফি (স্যালারি)">
-                                <StyledInput type="number" className="font-bold" value={tourData.costs?.hostFee} onChange={(e: any) => setTourData({...tourData, costs: {...tourData.costs!, hostFee: safeNumInput(e)}})} />
+                            <InputGroup label="মোট হোটেল ভাড়া">
+                                <StyledInput type="number" className="font-bold text-rose-700 bg-rose-50/30 border-rose-100 focus:border-rose-500 focus:ring-rose-200" value={tourData.costs?.hotelCost} onChange={(e: any) => setTourData({...tourData, costs: {...tourData.costs!, hotelCost: safeNumInput(e)}})} />
                             </InputGroup>
+                            <div className="col-span-2">
+                                <InputGroup label="হোস্ট ফি (স্যালারি)">
+                                    <StyledInput type="number" className="font-bold" value={tourData.costs?.hostFee} onChange={(e: any) => setTourData({...tourData, costs: {...tourData.costs!, hostFee: safeNumInput(e)}})} />
+                                </InputGroup>
+                            </div>
                         </div>
                         
                         <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
@@ -509,9 +540,10 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
                             </div>
                         )}
                     </Card>
+                    )}
 
                     <Card className="p-8">
-                        <SectionHeader icon={Utensils} title="দৈনিক খরচ" color="text-orange-700" />
+                        <SectionHeader icon={Utensils} title={isAdmin ? "দৈনিক খরচ ও অন্যান্য" : "দৈনিক খরচ আপডেট করুন"} color="text-orange-700" />
                         <div className="space-y-4">
                             {tourData.costs?.dailyExpenses?.map((day, index) => (
                                 <div key={index} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 hover:bg-white hover:shadow-sm transition-all">
@@ -519,17 +551,18 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
                                         <span className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600">{day.day}</span>
                                         <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">দিন {day.day} খরচ</h4>
                                     </div>
-                                    <div className="grid grid-cols-4 gap-2">
+                                    <div className="grid grid-cols-5 gap-2">
                                         {[
                                             { key: 'breakfast', label: 'নাস্তা' },
                                             { key: 'lunch', label: 'দুপুর' },
                                             { key: 'dinner', label: 'রাত' },
-                                            { key: 'transport', label: 'গাড়ি' }
-                                        ].map((meal) => (
-                                            <div key={meal.key} className="space-y-1">
-                                                <label className="text-[8px] font-bold text-slate-400 uppercase text-center block">{meal.label}</label>
-                                                <input type="number" value={(day as any)[meal.key]} onChange={e => handleDailyExpenseChange(index, meal.key as keyof DailyExpense, safeNumInput(e))}
-                                                className="w-full p-2 border border-slate-200 rounded-lg text-xs text-center font-bold outline-none focus:border-orange-400 focus:bg-white transition-all bg-white/50" placeholder="0"/>
+                                            { key: 'transport', label: 'গাড়ি' },
+                                            { key: 'other', label: 'অন্যান্য' }
+                                        ].map((item) => (
+                                            <div key={item.key} className="space-y-1">
+                                                <label className="text-[8px] font-bold text-slate-400 uppercase text-center block truncate">{item.label}</label>
+                                                <input type="number" value={(day as any)[item.key]} onChange={e => handleDailyExpenseChange(index, item.key as keyof DailyExpense, safeNumInput(e))}
+                                                className={`w-full p-2 border border-slate-200 rounded-lg text-xs text-center font-bold outline-none focus:bg-white transition-all bg-white/50 ${item.key === 'other' ? 'focus:border-violet-400' : 'focus:border-orange-400'}`} placeholder="0"/>
                                             </div>
                                         ))}
                                     </div>

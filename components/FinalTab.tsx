@@ -1,6 +1,8 @@
+
+
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, Guest } from '../types';
-import { CheckCircle, AlertTriangle, TrendingUp, Users, DollarSign, Wallet, ChevronDown, Activity, ArrowRight, PieChart } from 'lucide-react';
+import { CheckCircle, AlertTriangle, TrendingUp, Users, DollarSign, Wallet, ChevronDown, Activity, ArrowRight, PieChart, CalendarDays } from 'lucide-react';
 
 const FinalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
   const [selectedTourId, setSelectedTourId] = useState<string>('');
@@ -38,10 +40,11 @@ const FinalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
     : 0;
 
   const totalDailyExpenses = activeTour.costs?.dailyExpenses 
-    ? activeTour.costs.dailyExpenses.reduce((sum, day) => sum + Number(day.breakfast||0) + Number(day.lunch||0) + Number(day.dinner||0) + Number(day.transport||0), 0)
+    ? activeTour.costs.dailyExpenses.reduce((sum, day) => 
+        sum + Number(day.breakfast||0) + Number(day.lunch||0) + Number(day.dinner||0) + Number(day.transport||0) + Number(day.other||0), 0)
     : 0;
 
-  const totalFixedCosts = Number(activeTour.busConfig?.totalRent || 0) + Number(activeTour.costs?.hostFee || 0) + totalDailyExpenses;
+  const totalFixedCosts = Number(activeTour.busConfig?.totalRent || 0) + Number(activeTour.costs?.hostFee || 0) + Number(activeTour.costs?.hotelCost || 0) + totalDailyExpenses;
   
   const netOperation = totalCollection - totalFixedCosts;
 
@@ -123,7 +126,11 @@ const FinalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
 
       <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
           <div className="p-6 border-b border-slate-50 bg-slate-50/50 flex justify-between items-center">
-              <h3 className="font-bold text-slate-700 flex items-center text-xs uppercase tracking-widest"><Wallet size={16} className="mr-2 text-violet-500"/> বিস্তারিত খরচ</h3>
+              <h3 className="font-bold text-slate-700 flex items-center text-xs uppercase tracking-widest"><Wallet size={16} className="mr-2 text-violet-500"/> বিস্তারিত খরচ (সামারি)</h3>
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-violet-100 text-violet-700 rounded-lg text-[10px] font-bold uppercase tracking-wider">
+                  <CalendarDays size={12} />
+                  <span>{activeTour.duration} দিনের মোট হিসাব</span>
+              </div>
           </div>
           <div className="p-6 space-y-4 text-sm">
               <div className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors">
@@ -131,11 +138,15 @@ const FinalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
                   <span className="font-mono font-bold text-slate-700">৳ {Number(activeTour.busConfig?.totalRent || 0).toLocaleString()}</span>
               </div>
               <div className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors">
+                  <span className="text-slate-500 font-bold text-xs uppercase">হোটেল ভাড়া (ফিক্সড)</span>
+                  <span className="font-mono font-bold text-slate-700">৳ {Number(activeTour.costs?.hotelCost || 0).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors">
                   <span className="text-slate-500 font-bold text-xs uppercase">হোস্ট ফি (স্যালারি)</span>
                   <span className="font-mono font-bold text-slate-700">৳ {Number(activeTour.costs?.hostFee || 0).toLocaleString()}</span>
               </div>
               <div className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors">
-                  <span className="text-slate-500 font-bold text-xs uppercase">খাবার ও লোকাল ট্রান্সপোর্ট</span>
+                  <span className="text-slate-500 font-bold text-xs uppercase">খাবার, গাড়ি ও অন্যান্য (টোটাল)</span>
                   <span className="font-mono font-bold text-slate-700">৳ {totalDailyExpenses.toLocaleString()}</span>
               </div>
               <div className="h-px bg-slate-100 my-2"></div>

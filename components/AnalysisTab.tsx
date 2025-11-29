@@ -1,8 +1,10 @@
+
+
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps } from '../types';
 import { calculateBusFare } from '../utils/calculations';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
-import { TrendingUp, Users, DollarSign, AlertCircle, Bus, ChevronDown, Activity, Wallet } from 'lucide-react';
+import { TrendingUp, Users, DollarSign, AlertCircle, Bus, ChevronDown, Activity, Wallet, Building, Coffee, Car } from 'lucide-react';
 
 const AnalysisTab: React.FC<CommonTabProps> = ({ tours }) => {
   const [selectedTourId, setSelectedTourId] = useState<string>('');
@@ -54,11 +56,24 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours }) => {
         sum + (a.guests ? a.guests.reduce((gSum, g) => gSum + Number(g.collection || 0), 0) : 0), 0)
     : 0;
   
-  const totalDailyExpenses = activeTour.costs?.dailyExpenses 
-    ? activeTour.costs.dailyExpenses.reduce((sum, day) => sum + Number(day.breakfast||0) + Number(day.lunch||0) + Number(day.dinner||0) + Number(day.transport||0), 0)
+  // Expenses Calculation
+  const totalBusRent = Number(activeTour.busConfig.totalRent || 0);
+  const totalHostFee = Number(activeTour.costs.hostFee || 0);
+  const totalHotelCost = Number(activeTour.costs.hotelCost || 0);
+
+  const totalDailyMeals = activeTour.costs?.dailyExpenses 
+    ? activeTour.costs.dailyExpenses.reduce((sum, day) => sum + Number(day.breakfast||0) + Number(day.lunch||0) + Number(day.dinner||0), 0)
+    : 0;
+  
+  const totalDailyTransport = activeTour.costs?.dailyExpenses 
+    ? activeTour.costs.dailyExpenses.reduce((sum, day) => sum + Number(day.transport||0), 0)
     : 0;
 
-  const totalCosts = Number(activeTour.busConfig.totalRent || 0) + Number(activeTour.costs.hostFee || 0) + totalDailyExpenses;
+  const totalDailyExtra = activeTour.costs?.dailyExpenses 
+    ? activeTour.costs.dailyExpenses.reduce((sum, day) => sum + Number(day.other||0), 0)
+    : 0;
+
+  const totalCosts = totalBusRent + totalHostFee + totalHotelCost + totalDailyMeals + totalDailyTransport + totalDailyExtra;
   const netProfit = totalCollection - totalCosts;
 
   const financialData = [
@@ -132,6 +147,71 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours }) => {
                 </span>
             </div>
         </div>
+      </div>
+
+      {/* DETAILED BREAKDOWN (NEW ADDITION) */}
+      <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+          <div className="flex items-center gap-2 mb-6 pb-4 border-b border-slate-50">
+             <div className="p-2 bg-orange-50 rounded-lg text-orange-600">
+                <Activity size={18} />
+             </div>
+             <h3 className="font-bold text-slate-700 text-sm uppercase tracking-widest">খরচের বিস্তারিত ব্রেকডাউন</h3>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+              <div className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors">
+                  <div className="flex items-center gap-3">
+                      <div className="p-2 bg-violet-50 text-violet-500 rounded-lg"><Bus size={14} /></div>
+                      <span className="text-slate-600 font-bold text-xs uppercase">বাস ভাড়া</span>
+                  </div>
+                  <span className="font-mono font-bold text-slate-800">৳{totalBusRent.toLocaleString()}</span>
+              </div>
+
+              <div className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors">
+                  <div className="flex items-center gap-3">
+                      <div className="p-2 bg-pink-50 text-pink-500 rounded-lg"><Building size={14} /></div>
+                      <span className="text-slate-600 font-bold text-xs uppercase">হোটেল খরচ</span>
+                  </div>
+                  <span className="font-mono font-bold text-slate-800">৳{totalHotelCost.toLocaleString()}</span>
+              </div>
+
+              <div className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors">
+                  <div className="flex items-center gap-3">
+                      <div className="p-2 bg-orange-50 text-orange-500 rounded-lg"><Coffee size={14} /></div>
+                      <span className="text-slate-600 font-bold text-xs uppercase">খাবার খরচ (মোট)</span>
+                  </div>
+                  <span className="font-mono font-bold text-slate-800">৳{totalDailyMeals.toLocaleString()}</span>
+              </div>
+
+              <div className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors">
+                  <div className="flex items-center gap-3">
+                      <div className="p-2 bg-blue-50 text-blue-500 rounded-lg"><Car size={14} /></div>
+                      <span className="text-slate-600 font-bold text-xs uppercase">লোকাল ট্রান্সপোর্ট (মোট)</span>
+                  </div>
+                  <span className="font-mono font-bold text-slate-800">৳{totalDailyTransport.toLocaleString()}</span>
+              </div>
+
+              <div className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors">
+                  <div className="flex items-center gap-3">
+                      <div className="p-2 bg-gray-50 text-gray-500 rounded-lg"><Activity size={14} /></div>
+                      <span className="text-slate-600 font-bold text-xs uppercase">অন্যান্য / এক্সট্রা</span>
+                  </div>
+                  <span className="font-mono font-bold text-slate-800">৳{totalDailyExtra.toLocaleString()}</span>
+              </div>
+
+              <div className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors border-t md:border-t-0 border-slate-100 mt-2 md:mt-0">
+                  <div className="flex items-center gap-3">
+                      <div className="p-2 bg-teal-50 text-teal-500 rounded-lg"><Users size={14} /></div>
+                      <span className="text-slate-600 font-bold text-xs uppercase">হোস্ট ফি</span>
+                  </div>
+                  <span className="font-mono font-bold text-slate-800">৳{totalHostFee.toLocaleString()}</span>
+              </div>
+          </div>
+          
+          <div className="mt-6 pt-4 border-t border-dashed border-slate-200 flex justify-between items-center">
+              <span className="text-rose-500 font-black text-xs uppercase tracking-widest">সর্বমোট খরচ</span>
+              <span className="text-xl font-black text-rose-600">৳{totalCosts.toLocaleString()}</span>
+          </div>
       </div>
 
       {/* Charts */}

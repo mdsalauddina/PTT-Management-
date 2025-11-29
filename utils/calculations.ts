@@ -42,15 +42,15 @@ export const calculateBusFare = (busConfig: BusConfig) => {
   };
 };
 
-// Total Daily Expenses Sum
+// Total Daily Expenses Sum (Updated to include 'other')
 const calculateTotalDailyExpenses = (tour: Tour): number => {
     if (!tour.costs?.dailyExpenses) return 0;
     return tour.costs.dailyExpenses.reduce((sum, day) => 
-        sum + safeNum(day.breakfast) + safeNum(day.lunch) + safeNum(day.dinner) + safeNum(day.transport), 0
+        sum + safeNum(day.breakfast) + safeNum(day.lunch) + safeNum(day.dinner) + safeNum(day.transport) + safeNum(day.other), 0
     );
 };
 
-// Agency Settlement (Updated Logic: Tiered Buy Rates)
+// Agency Settlement (Updated Logic: Tiered Buy Rates + Hotel Cost)
 export const calculateAgencySettlement = (tour: Tour, agency: PartnerAgency) => {
   if (!tour || !agency) return { 
       totalCollection: 0, 
@@ -73,12 +73,13 @@ export const calculateAgencySettlement = (tour: Tour, agency: PartnerAgency) => 
   
   // 4. COST CALCULATION (Tiered Buy Rate Logic)
   
-  // A. Variable Costs (Host Fee + Daily Expenses) distributed over TOTAL SEATS
+  // A. Variable Costs (Host Fee + Hotel Cost + Daily Expenses) distributed over TOTAL SEATS
   const totalBusSeats = safeNum(tour.busConfig?.totalSeats) || 1;
   const hostFee = safeNum(tour.costs?.hostFee);
+  const hotelCost = safeNum(tour.costs?.hotelCost); // Added Hotel Cost
   const dailyExpensesTotal = calculateTotalDailyExpenses(tour);
   
-  const variableCostPerHead = (hostFee + dailyExpensesTotal) / totalBusSeats;
+  const variableCostPerHead = (hostFee + hotelCost + dailyExpensesTotal) / totalBusSeats;
 
   // B. Bus Costs (Tiered)
   const busFares = calculateBusFare(tour.busConfig);
@@ -160,10 +161,11 @@ export const calculatePersonalSettlement = (tour: Tour, personalData: PersonalDa
     // Cost Basis for Personal (Same logic: Per Seat Capacity)
     const totalRent = safeNum(tour.busConfig?.totalRent);
     const hostFee = safeNum(tour.costs?.hostFee);
+    const hotelCost = safeNum(tour.costs?.hotelCost); // Added Hotel Cost
     const dailyExpensesTotal = calculateTotalDailyExpenses(tour);
     const totalSeats = safeNum(tour.busConfig?.totalSeats) || 1;
 
-    const perHeadCost = (totalRent + hostFee + dailyExpensesTotal) / totalSeats;
+    const perHeadCost = (totalRent + hostFee + hotelCost + dailyExpensesTotal) / totalSeats;
     const hostShareOfBusRent = Math.ceil(perHeadCost * hostGuestCount);
 
     const netResult = totalPersonalIncome - personalExpenses - hostShareOfBusRent;

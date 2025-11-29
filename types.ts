@@ -32,11 +32,13 @@ export interface DailyExpense {
   lunch: number;
   dinner: number;
   transport: number;
+  other: number; // Added field for extra daily expenses
 }
 
 export interface TourCosts {
   perHead: number;
   hostFee: number;
+  hotelCost: number; // Added field for total hotel cost
   dailyExpenses: DailyExpense[];
 }
 
@@ -45,6 +47,7 @@ export interface Guest {
   name: string;
   phone: string;
   seatCount: number; // Number of seats for this group
+  seatNumbers?: string; // Added seat numbers (e.g., "A1, A2")
   unitPrice: number; // Per seat collection amount
   collection: number; // Total collection (seatCount * unitPrice)
   seatType: 'regular' | 'disc1' | 'disc2'; // Kept for backward compatibility/default
@@ -96,6 +99,7 @@ export interface PersonalData {
   personalBusD2Count: number;
   bookingFee: number;
   customExpenses: { id: string; name: string; amount: number }[];
+  guests?: Guest[]; // Added guests list to personal data
   updatedAt: any;
 }
 
