@@ -1,5 +1,7 @@
+
+
 import React from 'react';
-import { FolderPlus, BarChart3, UserCircle, Users, CheckSquare } from 'lucide-react';
+import { FolderPlus, BarChart3, UserCircle, Users, CheckSquare, List } from 'lucide-react';
 import { TabId, UserProfile } from '../types';
 
 interface BottomNavProps {
@@ -10,15 +12,16 @@ interface BottomNavProps {
 
 const BottomNav: React.FC<BottomNavProps> = ({ currentTab, setTab, user }) => {
   const navItems = [
-    { id: 'entry', label: 'এন্ট্রি', icon: FolderPlus, adminOnly: false },
-    { id: 'analysis', label: 'এনালাইসিস', icon: BarChart3, adminOnly: true },
-    { id: 'personal', label: 'পার্সোনাল', icon: UserCircle, adminOnly: false },
-    { id: 'share', label: 'শেয়ার', icon: Users, adminOnly: true },
-    { id: 'final', label: 'ফাইনাল', icon: CheckSquare, adminOnly: true },
+    { id: 'entry', label: 'এন্ট্রি', icon: FolderPlus, role: ['admin', 'host'] },
+    { id: 'analysis', label: 'এনালাইসিস', icon: BarChart3, role: ['admin'] },
+    { id: 'personal', label: 'পার্সোনাল', icon: UserCircle, role: ['admin', 'host'] },
+    { id: 'share', label: 'শেয়ার', icon: Users, role: ['admin', 'host'] },
+    { id: 'guest_list', label: 'গেস্ট', icon: List, role: ['admin', 'host'] },
+    { id: 'final', label: 'ফাইনাল', icon: CheckSquare, role: ['admin'] },
   ];
 
   const filteredItems = navItems.filter(item => 
-    !item.adminOnly || user?.role === 'admin'
+    item.role.includes(user?.role || '')
   );
 
   return (
@@ -32,7 +35,7 @@ const BottomNav: React.FC<BottomNavProps> = ({ currentTab, setTab, user }) => {
             <button
               key={item.id}
               onClick={() => setTab(item.id as TabId)}
-              className="flex flex-col items-center justify-center p-2 min-w-[60px] group transition-all duration-300"
+              className="flex flex-col items-center justify-center p-2 min-w-[50px] group transition-all duration-300"
             >
               <div className={`p-2.5 rounded-2xl transition-all duration-300 ${isActive ? 'bg-slate-900 text-white shadow-lg shadow-slate-300 -translate-y-2' : 'text-slate-400 group-hover:bg-slate-50'}`}>
                  <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />

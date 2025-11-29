@@ -1,9 +1,10 @@
 
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { Tour, UserProfile, Guest, PartnerAgency } from '../types';
 import { db } from '../services/firebase';
 import { doc, updateDoc, Timestamp } from 'firebase/firestore';
-import { ChevronDown, LogOut, Users, Plus, Phone, Info, Star, Calendar, History, Wallet, LayoutGrid, Sparkles } from 'lucide-react';
+import { ChevronDown, LogOut, Users, Plus, Phone, Info, Star, Calendar, History, Wallet, LayoutGrid, Sparkles, Briefcase, Armchair, Tag } from 'lucide-react';
 import { calculateAgencySettlement } from '../utils/calculations';
 
 interface AgencyDashboardProps {
@@ -14,7 +15,7 @@ interface AgencyDashboardProps {
 }
 
 const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshTours, handleLogout }) => {
-  const [activeTab, setActiveTab] = useState<'booking' | 'history'>('booking');
+  const [activeTab, setActiveTab] = useState<'all' | 'my' | 'history'>('all');
   const [selectedTourId, setSelectedTourId] = useState<string>('');
   const [isAddingBooking, setIsAddingBooking] = useState(false);
   const [newBooking, setNewBooking] = useState({ name: '', phone: '', seatCount: '', unitPrice: '' });
@@ -28,14 +29,19 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
   };
 
   const todayStr = getLocalDateString();
-  const upcomingTours = tours.filter(t => t.date >= todayStr);
-  const pastTours = tours.filter(t => {
-      const isPast = t.date < todayStr;
-      const participated = t.partnerAgencies?.some(a => a.email === user.email);
-      return isPast && participated;
+  
+  // Filter Logic
+  const allUpcoming = tours.filter(t => t.date >= todayStr);
+  const myBookings = tours.filter(t => {
+      const isPartner = t.partnerAgencies?.some(a => a.email === user.email);
+      return t.date >= todayStr && isPartner;
+  });
+  const historyTours = tours.filter(t => {
+      const isPartner = t.partnerAgencies?.some(a => a.email === user.email);
+      return t.date < todayStr && isPartner;
   });
 
-  const displayTours = activeTab === 'booking' ? upcomingTours : pastTours;
+  const displayTours = activeTab === 'all' ? allUpcoming : activeTab === 'my' ? myBookings : historyTours;
 
   useEffect(() => {
     if (displayTours.length > 0) {
@@ -52,6 +58,28 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
   const hasGuests = myAgencyData && myAgencyData.guests && myAgencyData.guests.length > 0;
   
   const settlement = (activeTour && myAgencyData) ? calculateAgencySettlement(activeTour, myAgencyData) : null;
+
+  // Calculate Agency Specific Seat Stats
+  const agencySeatStats = useMemo(() => {
+    let stats = { regular: 0, d1: 0, d2: 0, total: 0 };
+    if (myAgencyData && myAgencyData.guests) {
+        myAgencyData.guests.forEach(g => {
+             if (g.paxBreakdown) {
+                  stats.regular += safeNum(g.paxBreakdown.regular);
+                  stats.d1 += safeNum(g.paxBreakdown.disc1);
+                  stats.d2 += safeNum(g.paxBreakdown.disc2);
+             } else {
+                  const cnt = safeNum(g.seatCount);
+                  const type = g.seatType || 'regular';
+                  if(type === 'disc1') stats.d1 += cnt;
+                  else if(type === 'disc2') stats.d2 += cnt;
+                  else stats.regular += cnt;
+             }
+        });
+        stats.total = stats.regular + stats.d1 + stats.d2;
+    }
+    return stats;
+  }, [myAgencyData]);
 
   // Breakdown Calculation for Display
   const calculateBreakdown = () => {
@@ -144,16 +172,20 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
         </button>
       </div>
 
-      {/* Compact Tabs */}
+      {/* 3 Tabs */}
       <div className="bg-white border-b border-slate-200 px-4 pt-2 sticky top-[58px] z-20">
-          <div className="flex gap-4 max-w-4xl mx-auto">
-              <button onClick={() => setActiveTab('booking')}
-                className={`flex-1 pb-3 text-[10px] font-black uppercase tracking-widest flex justify-center items-center gap-1.5 border-b-2 transition-all ${activeTab === 'booking' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
-                  <Calendar size={12}/> বুকিং
+          <div className="flex gap-2 max-w-4xl mx-auto">
+              <button onClick={() => setActiveTab('all')}
+                className={`flex-1 pb-3 text-[10px] font-black uppercase tracking-widest flex justify-center items-center gap-1.5 border-b-2 transition-all ${activeTab === 'all' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
+                  <Briefcase size={12}/> সব ট্যুর
+              </button>
+              <button onClick={() => setActiveTab('my')}
+                className={`flex-1 pb-3 text-[10px] font-black uppercase tracking-widest flex justify-center items-center gap-1.5 border-b-2 transition-all ${activeTab === 'my' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
+                  <Calendar size={12}/> আমার বুকিং
               </button>
               <button onClick={() => setActiveTab('history')}
                 className={`flex-1 pb-3 text-[10px] font-black uppercase tracking-widest flex justify-center items-center gap-1.5 border-b-2 transition-all ${activeTab === 'history' ? 'border-violet-600 text-violet-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
-                  <History size={12}/> রিপোর্ট
+                  <History size={12}/> হিস্ট্রি
               </button>
           </div>
       </div>
@@ -163,8 +195,8 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
         {/* Compact Tour Selector */}
         {displayTours.length > 0 ? (
             <div className="bg-white p-2.5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3 relative z-10">
-                <div className={`p-2 rounded-xl ${activeTab === 'booking' ? 'bg-blue-50 text-blue-600' : 'bg-violet-50 text-violet-600'}`}>
-                    {activeTab === 'booking' ? <Sparkles size={16} /> : <History size={16} />}
+                <div className={`p-2 rounded-xl ${activeTab === 'all' ? 'bg-indigo-50 text-indigo-600' : activeTab === 'my' ? 'bg-blue-50 text-blue-600' : 'bg-violet-50 text-violet-600'}`}>
+                    {activeTab === 'all' ? <Briefcase size={16} /> : activeTab === 'my' ? <Sparkles size={16} /> : <History size={16} />}
                 </div>
                 <div className="flex-1">
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">ট্যুর নির্বাচন</p>
@@ -182,21 +214,58 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
             </div>
         ) : (
             <div className="p-10 text-center text-slate-400 bg-white rounded-2xl border border-slate-200 text-xs">
-                {activeTab === 'booking' ? 'কোনো আসন্ন ট্যুর নেই।' : 'কোনো হিস্ট্রি পাওয়া যায়নি।'}
+                {activeTab === 'all' ? 'কোনো আসন্ন ট্যুর নেই।' : activeTab === 'my' ? 'আপনার কোনো বুকিং নেই।' : 'কোনো হিস্ট্রি পাওয়া যায়নি।'}
             </div>
         )}
 
         {activeTour && (
             <>
                 {/* 1. FINANCIAL SUMMARY & BREAKDOWN */}
-                {(activeTab === 'history' || (activeTab === 'booking' && hasGuests)) && settlement && breakdown && (
+                {(activeTab !== 'all' || hasGuests) && settlement && breakdown && (
                     <div className="animate-fade-in space-y-4">
                         
-                        {/* Per Person Breakdown Card */}
+                        {/* DETAILED SEAT & RATE BREAKDOWN (Similar to Analysis Tab) */}
+                        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden p-5">
+                            <div className="flex items-center gap-2 mb-4 border-b border-slate-50 pb-3">
+                                <Armchair size={16} className="text-violet-500"/>
+                                <h3 className="font-bold text-slate-700 text-xs uppercase tracking-widest">বুকিং এবং রেট বিস্তারিত</h3>
+                            </div>
+                            
+                            <div className="grid grid-cols-3 gap-3">
+                                {/* Regular */}
+                                <div className="bg-violet-50 p-3 rounded-xl border border-violet-100 text-center relative overflow-hidden group">
+                                    <p className="text-[8px] font-bold text-violet-400 uppercase mb-1 tracking-wider">রেগুলার সিট</p>
+                                    <p className="text-lg font-black text-violet-700">৳{settlement.rates.regular}</p>
+                                    <div className="mt-2 text-[9px] bg-white/60 rounded-lg py-1 font-bold text-violet-600 border border-violet-100">
+                                        বুকিং: {agencySeatStats.regular} টি
+                                    </div>
+                                </div>
+
+                                {/* Disc 1 */}
+                                <div className="bg-amber-50 p-3 rounded-xl border border-amber-100 text-center relative overflow-hidden group">
+                                    <p className="text-[8px] font-bold text-amber-500 uppercase mb-1 tracking-wider">ডিসকাউন্ট ১</p>
+                                    <p className="text-lg font-black text-amber-600">৳{settlement.rates.d1}</p>
+                                    <div className="mt-2 text-[9px] bg-white/60 rounded-lg py-1 font-bold text-amber-600 border border-amber-100">
+                                        বুকিং: {agencySeatStats.d1} টি
+                                    </div>
+                                </div>
+
+                                {/* Disc 2 */}
+                                <div className="bg-orange-50 p-3 rounded-xl border border-orange-100 text-center relative overflow-hidden group">
+                                    <p className="text-[8px] font-bold text-orange-500 uppercase mb-1 tracking-wider">ডিসকাউন্ট ২</p>
+                                    <p className="text-lg font-black text-orange-600">৳{settlement.rates.d2}</p>
+                                    <div className="mt-2 text-[9px] bg-white/60 rounded-lg py-1 font-bold text-orange-600 border border-orange-100">
+                                        বুকিং: {agencySeatStats.d2} টি
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Cost Components Breakdown */}
                         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                             <div className="px-5 py-3 bg-slate-50/50 border-b border-slate-100 flex items-center gap-2">
-                                <Info size={14} className="text-slate-400"/>
-                                <h3 className="font-bold text-slate-700 text-[10px] uppercase tracking-widest">জনপ্রতি খরচের ব্রেকডাউন</h3>
+                                <Tag size={14} className="text-slate-400"/>
+                                <h3 className="font-bold text-slate-700 text-[10px] uppercase tracking-widest">খরচের খাত (জনপ্রতি)</h3>
                             </div>
                             <div className="p-5">
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -216,10 +285,6 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
                                         <p className="text-[9px] text-slate-400 font-bold uppercase mb-1">ম্যানেজমেন্ট</p>
                                         <p className="font-bold text-slate-700">৳{breakdown.perHeadMgmt}</p>
                                     </div>
-                                </div>
-                                <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center">
-                                    <span className="text-[10px] font-black text-slate-500 uppercase">মোট রেট (জনপ্রতি)</span>
-                                    <span className="text-base font-black text-slate-800">৳{settlement.rates.regular}</span>
                                 </div>
                             </div>
                         </div>
@@ -256,7 +321,8 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
                         <h3 className="font-bold text-slate-700 text-[10px] uppercase tracking-widest flex items-center gap-2">
                             <Users size={14} className="text-slate-400"/> গেস্ট লিস্ট
                         </h3>
-                        {activeTab === 'booking' && (
+                        {/* Can add bookings if it's All Tours (new booking) or My Bookings */}
+                        {(activeTab === 'all' || activeTab === 'my') && (
                             <button 
                                 onClick={() => setIsAddingBooking(!isAddingBooking)} 
                                 className="text-[9px] font-bold bg-slate-900 text-white px-3 py-1.5 rounded-lg uppercase tracking-wide flex items-center gap-1.5 shadow-md hover:bg-slate-800 transition-all"
@@ -266,7 +332,7 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
                         )}
                     </div>
 
-                    {isAddingBooking && activeTab === 'booking' && (
+                    {isAddingBooking && (activeTab === 'all' || activeTab === 'my') && (
                         <div className="p-5 bg-slate-50 border-b border-slate-100 animate-fade-in">
                             <div className="grid grid-cols-1 gap-3 mb-4">
                                 <div>

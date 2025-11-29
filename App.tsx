@@ -1,10 +1,11 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { auth, db } from './services/firebase';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, collection, query, orderBy, getDocs } from 'firebase/firestore';
 import { UserProfile, TabId, Tour } from './types';
-import { LogOut, LayoutGrid, ShieldCheck, Sparkles, FolderPlus, BarChart3, UserCircle, Users, CheckSquare, Lock } from 'lucide-react';
+import { LogOut, LayoutGrid, ShieldCheck, Sparkles, FolderPlus, BarChart3, UserCircle, Users, CheckSquare, Lock, List } from 'lucide-react';
 
 // Components
 import EntryTab from './components/EntryTab';
@@ -15,6 +16,7 @@ import FinalTab from './components/FinalTab';
 import BottomNav from './components/BottomNav';
 import LoginScreen from './components/LoginScreen';
 import AgencyDashboard from './components/AgencyDashboard';
+import HostGuestList from './components/HostGuestList';
 
 const App = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -34,11 +36,20 @@ const App = () => {
             if (userDoc.exists()) {
               const userData = userDoc.data();
               if (userData.role) {
+                  const role = userData.role;
                   setUser({
                     uid: firebaseUser.uid,
                     email: firebaseUser.email || '',
                     ...userData
                   } as UserProfile);
+                  
+                  // Set default tab based on role
+                  if (role === 'host') {
+                      setCurrentTab('guest_list');
+                  } else {
+                      setCurrentTab('entry');
+                  }
+                  
                   setNoAccess(false);
               } else {
                   setNoAccess(true);
@@ -102,10 +113,10 @@ const App = () => {
         fetchedTours.push({ id: doc.id, ...doc.data() } as Tour);
       });
 
+      // Strict filtering for Host
       if (user.role === 'host') {
           fetchedTours = fetchedTours.filter(t => 
-              (t.createdBy && t.createdBy === user.email) || 
-              (t.assignedHostId && t.assignedHostId === user.uid)
+              t.assignedHostId === user.uid
           );
       } else if (user.role === 'agency') {
           const todayStr = getLocalDateString();
@@ -173,19 +184,21 @@ const App = () => {
       case 'personal': return <PersonalTab {...commonProps} />;
       case 'share': return <ShareTourTab {...commonProps} />;
       case 'final': return <FinalTab {...commonProps} />;
+      case 'guest_list': return <HostGuestList {...commonProps} />;
       default: return <EntryTab {...commonProps} />;
     }
   };
 
   const navItems = [
-    { id: 'entry', label: 'ট্যুর ইভেন্ট', icon: FolderPlus, adminOnly: false },
-    { id: 'analysis', label: 'এনালাইসিস', icon: BarChart3, adminOnly: true },
-    { id: 'personal', label: 'পার্সোনাল', icon: UserCircle, adminOnly: false },
-    { id: 'share', label: 'পার্টনার', icon: Users, adminOnly: true },
-    { id: 'final', label: 'ফাইনাল', icon: CheckSquare, adminOnly: true },
+    { id: 'entry', label: 'ট্যুর ইভেন্ট', icon: FolderPlus, role: ['admin', 'host'] },
+    { id: 'analysis', label: 'এনালাইসিস', icon: BarChart3, role: ['admin'] },
+    { id: 'personal', label: 'পার্সোনাল', icon: UserCircle, role: ['admin', 'host'] },
+    { id: 'share', label: 'পার্টনার', icon: Users, role: ['admin', 'host'] },
+    { id: 'guest_list', label: 'গেস্ট লিস্ট', icon: List, role: ['host', 'admin'] }, // Host specific
+    { id: 'final', label: 'ফাইনাল', icon: CheckSquare, role: ['admin'] },
   ];
   
-  const filteredNavItems = navItems.filter(item => !item.adminOnly || user?.role === 'admin');
+  const filteredNavItems = navItems.filter(item => item.role.includes(user.role));
 
   return (
       <div className="min-h-screen font-sans text-slate-900 flex bg-slate-50">

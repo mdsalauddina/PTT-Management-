@@ -1,10 +1,12 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, PersonalData } from '../types';
 import { db } from '../services/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from 'recharts';
-import { TrendingUp, Activity, Wallet, Building, Coffee, Car, Utensils, Users, ChevronDown, AlertCircle, Bus } from 'lucide-react';
+import { TrendingUp, Activity, Wallet, Building, Coffee, Car, Utensils, Users, ChevronDown, AlertCircle, Bus, Tags } from 'lucide-react';
+import { calculateBusFare, calculateTotalDailyExpenses, safeNum } from '../utils/calculations';
 
 const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
   const [selectedTourId, setSelectedTourId] = useState<string>('');
@@ -111,6 +113,17 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
 
   // Per Head Calculations
   const calcPerHead = (amount: number) => Math.ceil(amount / (totalSeats || 1));
+
+  // --- COST PER SEAT TYPE CALCULATION ---
+  const dailyExpensesTotal = calculateTotalDailyExpenses(activeTour);
+  const variableCostPerHead = (totalHostFee + totalHotelCost + dailyExpensesTotal) / totalSeats;
+  const busFares = calculateBusFare(activeTour.busConfig);
+
+  const costPerSeat = {
+      regular: Math.ceil(busFares.regularFare + variableCostPerHead),
+      d1: Math.ceil(busFares.discount1Fare + variableCostPerHead),
+      d2: Math.ceil(busFares.discount2Fare + variableCostPerHead)
+  };
 
   const seatData = [
     { name: 'বুকড', value: totalBooked, color: '#6366f1' },
@@ -262,6 +275,31 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
                </div>
           </div>
       </div>
+      
+      {/* COST PER SEAT TYPE BREAKDOWN */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden p-5">
+          <h3 className="text-[11px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-2 mb-4">
+              <Tags size={14} className="text-slate-400"/> সিট টাইপ অনুযায়ী আসল খরচ (Buy Rate)
+          </h3>
+          <div className="grid grid-cols-3 gap-4">
+              <div className="bg-violet-50 p-4 rounded-xl border border-violet-100 text-center">
+                  <p className="text-[9px] font-bold text-violet-400 uppercase mb-1">রেগুলার সিট</p>
+                  <p className="text-xl font-black text-violet-700">৳{costPerSeat.regular}</p>
+              </div>
+              <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 text-center">
+                  <p className="text-[9px] font-bold text-amber-500 uppercase mb-1">ডিসকাউন্ট ১</p>
+                  <p className="text-xl font-black text-amber-600">৳{costPerSeat.d1}</p>
+              </div>
+              <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 text-center">
+                  <p className="text-[9px] font-bold text-orange-500 uppercase mb-1">ডিসকাউন্ট ২</p>
+                  <p className="text-xl font-black text-orange-600">৳{costPerSeat.d2}</p>
+              </div>
+          </div>
+          <p className="text-[9px] text-slate-400 mt-3 text-center">
+              * এই খরচ = বাস ভাড়া (টাইপ ভিত্তিক) + (ফিক্সড খরচ + দৈনিক খরচ) ÷ মোট সিট
+          </p>
+      </div>
+
     </div>
   );
 };

@@ -43,7 +43,7 @@ export const calculateBusFare = (busConfig: BusConfig) => {
 };
 
 // Total Daily Expenses Sum (Updated to include 'other')
-const calculateTotalDailyExpenses = (tour: Tour): number => {
+export const calculateTotalDailyExpenses = (tour: Tour): number => {
     if (!tour.costs?.dailyExpenses) return 0;
     return tour.costs.dailyExpenses.reduce((sum, day) => 
         sum + safeNum(day.breakfast) + safeNum(day.lunch) + safeNum(day.dinner) + safeNum(day.transport) + safeNum(day.other), 0
