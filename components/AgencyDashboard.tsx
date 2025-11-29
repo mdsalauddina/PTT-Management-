@@ -1,10 +1,9 @@
 
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Tour, UserProfile, Guest, PartnerAgency } from '../types';
 import { db } from '../services/firebase';
 import { doc, updateDoc, Timestamp } from 'firebase/firestore';
-import { ChevronDown, LogOut, Users, Plus, Phone, Info, Star, Calendar, History, Wallet, LayoutGrid, Sparkles, Briefcase, Armchair, Tag } from 'lucide-react';
+import { ChevronDown, LogOut, Users, Plus, Phone, Info, Star, Calendar, History, Wallet, LayoutGrid, Sparkles, Briefcase, Armchair, Tag, Clock, MapPin, X, ArrowRight, CheckCircle } from 'lucide-react';
 import { calculateAgencySettlement } from '../utils/calculations';
 
 interface AgencyDashboardProps {
@@ -17,7 +16,10 @@ interface AgencyDashboardProps {
 const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshTours, handleLogout }) => {
   const [activeTab, setActiveTab] = useState<'all' | 'my' | 'history'>('all');
   const [selectedTourId, setSelectedTourId] = useState<string>('');
-  const [isAddingBooking, setIsAddingBooking] = useState(false);
+  
+  // Booking Modal State
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+  const [targetTour, setTargetTour] = useState<Tour | null>(null);
   const [newBooking, setNewBooking] = useState({ name: '', phone: '', seatCount: '', unitPrice: '' });
 
   const getLocalDateString = () => {
@@ -32,34 +34,39 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
   
   // Filter Logic
   const allUpcoming = tours.filter(t => t.date >= todayStr);
+  
   const myBookings = tours.filter(t => {
       const isPartner = t.partnerAgencies?.some(a => a.email === user.email);
       return t.date >= todayStr && isPartner;
   });
+  
   const historyTours = tours.filter(t => {
       const isPartner = t.partnerAgencies?.some(a => a.email === user.email);
       return t.date < todayStr && isPartner;
   });
 
-  const displayTours = activeTab === 'all' ? allUpcoming : activeTab === 'my' ? myBookings : historyTours;
+  // Determine which list to use for the dropdown in details view
+  const detailViewTours = activeTab === 'my' ? myBookings : historyTours;
 
+  // Auto-select first tour when switching to detail views
   useEffect(() => {
-    if (displayTours.length > 0) {
-        setSelectedTourId(displayTours[0].id);
+    if (activeTab !== 'all' && detailViewTours.length > 0) {
+        setSelectedTourId(detailViewTours[0].id);
     } else {
         setSelectedTourId('');
     }
   }, [activeTab, tours.length]); 
 
-  const activeTour = tours.find(t => t.id === selectedTourId) || null;
-  const myAgencyData = activeTour?.partnerAgencies?.find(a => a.email === user.email);
+  // Selected tour for detail view
+  const activeDetailTour = detailViewTours.find(t => t.id === selectedTourId) || null;
+  const myAgencyData = activeDetailTour?.partnerAgencies?.find(a => a.email === user.email);
 
   const safeNum = (val: any) => Number(val) || 0;
   const hasGuests = myAgencyData && myAgencyData.guests && myAgencyData.guests.length > 0;
   
-  const settlement = (activeTour && myAgencyData) ? calculateAgencySettlement(activeTour, myAgencyData) : null;
+  const settlement = (activeDetailTour && myAgencyData) ? calculateAgencySettlement(activeDetailTour, myAgencyData) : null;
 
-  // Calculate Agency Specific Seat Stats
+  // Calculate Agency Specific Seat Stats (Memoized)
   const agencySeatStats = useMemo(() => {
     let stats = { regular: 0, d1: 0, d2: 0, total: 0 };
     if (myAgencyData && myAgencyData.guests) {
@@ -82,17 +89,17 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
   }, [myAgencyData]);
 
   // Breakdown Calculation for Display
-  const calculateBreakdown = () => {
-      if (!activeTour) return null;
-      const totalSeats = safeNum(activeTour.busConfig?.totalSeats) || 1;
-      const hostFee = safeNum(activeTour.costs?.hostFee);
-      const hotelCost = safeNum(activeTour.costs?.hotelCost);
-      const dailyExpensesTotal = activeTour.costs?.dailyExpenses ? activeTour.costs.dailyExpenses.reduce((sum, day) => 
+  const calculateBreakdown = (tour: Tour) => {
+      if (!tour) return null;
+      const totalSeats = safeNum(tour.busConfig?.totalSeats) || 1;
+      const hostFee = safeNum(tour.costs?.hostFee);
+      const hotelCost = safeNum(tour.costs?.hotelCost);
+      const dailyExpensesTotal = tour.costs?.dailyExpenses ? tour.costs.dailyExpenses.reduce((sum, day) => 
           sum + safeNum(day.breakfast) + safeNum(day.lunch) + safeNum(day.dinner) + safeNum(day.transport) + safeNum(day.other), 0
       ) : 0;
 
       // Per Head Fixed & Variable
-      const perHeadBus = Math.ceil(safeNum(activeTour.busConfig?.totalRent) / totalSeats);
+      const perHeadBus = Math.ceil(safeNum(tour.busConfig?.totalRent) / totalSeats);
       const perHeadHotel = Math.ceil(hotelCost / totalSeats);
       const perHeadMgmt = Math.ceil(hostFee / totalSeats);
       const perHeadDaily = Math.ceil(dailyExpensesTotal / totalSeats);
@@ -102,16 +109,29 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
       return { perHeadBus, perHeadHotel, perHeadMgmt, perHeadDaily, totalPerHead };
   };
   
-  const breakdown = calculateBreakdown();
+  const breakdown = activeDetailTour ? calculateBreakdown(activeDetailTour) : null;
 
-  const handleAddBooking = async () => {
-      if (!activeTour) return;
+  // --- ACTIONS ---
+
+  const openBookingModal = (tour: Tour) => {
+      setTargetTour(tour);
+      setNewBooking({ name: '', phone: '', seatCount: '', unitPrice: '' });
+      setIsBookingModalOpen(true);
+  };
+
+  const closeBookingModal = () => {
+      setIsBookingModalOpen(false);
+      setTargetTour(null);
+  };
+
+  const handleConfirmBooking = async () => {
+      if (!targetTour) return;
       if (!newBooking.name || !newBooking.seatCount) {
           alert("নাম এবং সিট সংখ্যা দিন।");
           return;
       }
 
-      let agencies = activeTour.partnerAgencies ? JSON.parse(JSON.stringify(activeTour.partnerAgencies)) : [];
+      let agencies = targetTour.partnerAgencies ? JSON.parse(JSON.stringify(targetTour.partnerAgencies)) : [];
       let agencyIndex = agencies.findIndex((a: PartnerAgency) => a.email === user.email);
       
       if (agencyIndex === -1) {
@@ -144,11 +164,12 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
       agencies[agencyIndex].guests.push(newGuest);
 
       try {
-        const tourRef = doc(db, 'tours', activeTour.id);
+        const tourRef = doc(db, 'tours', targetTour.id);
         await updateDoc(tourRef, { partnerAgencies: agencies, updatedAt: Timestamp.now() });
         await refreshTours();
-        setNewBooking({ name: '', phone: '', seatCount: '', unitPrice: '' });
-        setIsAddingBooking(false);
+        closeBookingModal();
+        // If user was in 'all', maybe switch to 'my'? optional.
+        // setActiveTab('my'); 
       } catch (error) {
         console.error("Error adding booking:", error);
         alert("বুকিং যোগ করা যায়নি।");
@@ -181,7 +202,7 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
               </button>
               <button onClick={() => setActiveTab('my')}
                 className={`flex-1 pb-3 text-[10px] font-black uppercase tracking-widest flex justify-center items-center gap-1.5 border-b-2 transition-all ${activeTab === 'my' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
-                  <Calendar size={12}/> আমার বুকিং
+                  <Sparkles size={12}/> আমার বুকিং
               </button>
               <button onClick={() => setActiveTab('history')}
                 className={`flex-1 pb-3 text-[10px] font-black uppercase tracking-widest flex justify-center items-center gap-1.5 border-b-2 transition-all ${activeTab === 'history' ? 'border-violet-600 text-violet-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
@@ -192,39 +213,79 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
 
       <div className="max-w-4xl mx-auto p-4 space-y-4 w-full flex-1">
         
-        {/* Compact Tour Selector */}
-        {displayTours.length > 0 ? (
-            <div className="bg-white p-2.5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3 relative z-10">
-                <div className={`p-2 rounded-xl ${activeTab === 'all' ? 'bg-indigo-50 text-indigo-600' : activeTab === 'my' ? 'bg-blue-50 text-blue-600' : 'bg-violet-50 text-violet-600'}`}>
-                    {activeTab === 'all' ? <Briefcase size={16} /> : activeTab === 'my' ? <Sparkles size={16} /> : <History size={16} />}
-                </div>
-                <div className="flex-1">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">ট্যুর নির্বাচন</p>
-                    <div className="relative -mt-1">
-                        <select 
-                            value={selectedTourId}
-                            onChange={(e) => setSelectedTourId(e.target.value)}
-                            className="w-full appearance-none bg-transparent text-slate-800 text-sm font-black focus:outline-none cursor-pointer pr-6 py-1"
-                        >
-                            {displayTours.map(t => <option key={t.id} value={t.id}>{t.name} ({t.date})</option>)}
-                        </select>
-                        <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={12} strokeWidth={2.5} />
+        {/* --- VIEW 1: ALL TOURS (List View, No Details) --- */}
+        {activeTab === 'all' && (
+            <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+                {allUpcoming.length === 0 ? (
+                    <div className="col-span-full p-12 text-center text-slate-400 bg-white rounded-[2.5rem] border border-slate-100 text-xs font-bold">
+                        কোনো আসন্ন ট্যুর নেই।
                     </div>
-                </div>
-            </div>
-        ) : (
-            <div className="p-10 text-center text-slate-400 bg-white rounded-2xl border border-slate-200 text-xs">
-                {activeTab === 'all' ? 'কোনো আসন্ন ট্যুর নেই।' : activeTab === 'my' ? 'আপনার কোনো বুকিং নেই।' : 'কোনো হিস্ট্রি পাওয়া যায়নি।'}
+                ) : (
+                    allUpcoming.map(tour => (
+                        <div key={tour.id} className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-6 hover:shadow-lg transition-all flex flex-col justify-between group">
+                            <div>
+                                <div className="flex justify-between items-start mb-4">
+                                    <span className="bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full text-[10px] font-bold border border-indigo-100">
+                                        {tour.date}
+                                    </span>
+                                    <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
+                                        <Clock size={12}/> {tour.duration} দিন
+                                    </span>
+                                </div>
+                                <h3 className="font-black text-xl text-slate-800 mb-2 leading-tight group-hover:text-indigo-600 transition-colors">
+                                    {tour.name}
+                                </h3>
+                                <div className="flex items-center gap-2 text-[11px] text-slate-500 font-bold mb-6">
+                                    <MapPin size={12}/> বাস: {tour.busConfig?.totalSeats || 40} সিট
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => openBookingModal(tour)}
+                                className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg shadow-slate-200 hover:bg-indigo-600 hover:shadow-indigo-200 transition-all active:scale-95 flex items-center justify-center gap-2"
+                            >
+                                <Plus size={16}/> বুকিং দিন
+                            </button>
+                        </div>
+                    ))
+                )}
             </div>
         )}
 
-        {activeTour && (
+
+        {/* --- VIEW 2 & 3: MY BOOKINGS & HISTORY (Detail View) --- */}
+        {(activeTab === 'my' || activeTab === 'history') && (
             <>
-                {/* 1. FINANCIAL SUMMARY & BREAKDOWN */}
-                {(activeTab !== 'all' || hasGuests) && settlement && breakdown && (
+                {/* Tour Selector Dropdown */}
+                {detailViewTours.length > 0 ? (
+                    <div className="bg-white p-2.5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3 relative z-10 mb-6">
+                        <div className={`p-2 rounded-xl ${activeTab === 'my' ? 'bg-blue-50 text-blue-600' : 'bg-violet-50 text-violet-600'}`}>
+                            {activeTab === 'my' ? <Sparkles size={16} /> : <History size={16} />}
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">ট্যুর নির্বাচন</p>
+                            <div className="relative -mt-1">
+                                <select 
+                                    value={selectedTourId}
+                                    onChange={(e) => setSelectedTourId(e.target.value)}
+                                    className="w-full appearance-none bg-transparent text-slate-800 text-sm font-black focus:outline-none cursor-pointer pr-6 py-1"
+                                >
+                                    {detailViewTours.map(t => <option key={t.id} value={t.id}>{t.name} ({t.date})</option>)}
+                                </select>
+                                <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={12} strokeWidth={2.5} />
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="p-10 text-center text-slate-400 bg-white rounded-2xl border border-slate-200 text-xs font-bold">
+                        {activeTab === 'my' ? 'আপনার কোনো বুকিং নেই।' : 'কোনো হিস্ট্রি পাওয়া যায়নি।'}
+                    </div>
+                )}
+
+                {/* Details Content */}
+                {activeDetailTour && settlement && breakdown && (
                     <div className="animate-fade-in space-y-4">
                         
-                        {/* DETAILED SEAT & RATE BREAKDOWN (Similar to Analysis Tab) */}
+                        {/* DETAILED SEAT & RATE BREAKDOWN */}
                         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden p-5">
                             <div className="flex items-center gap-2 mb-4 border-b border-slate-50 pb-3">
                                 <Armchair size={16} className="text-violet-500"/>
@@ -312,82 +373,123 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
                                  </p>
                              </div>
                         </div>
+
+                        {/* GUEST LIST */}
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mt-4">
+                            <div className="px-5 py-4 border-b border-slate-50 flex justify-between items-center bg-white sticky top-0 z-10">
+                                <h3 className="font-bold text-slate-700 text-[10px] uppercase tracking-widest flex items-center gap-2">
+                                    <Users size={14} className="text-slate-400"/> গেস্ট লিস্ট ({settlement.totalSeats})
+                                </h3>
+                                {/* Add Guest button for My Bookings */}
+                                {activeTab === 'my' && (
+                                    <button 
+                                        onClick={() => openBookingModal(activeDetailTour)} 
+                                        className="text-[9px] font-bold bg-slate-900 text-white px-3 py-1.5 rounded-lg uppercase tracking-wide flex items-center gap-1.5 shadow-md hover:bg-slate-800 transition-all"
+                                    >
+                                        <Plus size={12}/> আরো যোগ করুন
+                                    </button>
+                                )}
+                            </div>
+
+                            {!hasGuests ? (
+                                <div className="p-10 text-center text-slate-400 text-xs font-bold italic">কোনো গেস্ট নেই।</div>
+                            ) : (
+                                <div className="space-y-2 p-4 bg-slate-50/30">
+                                    {myAgencyData.guests.map((guest, idx) => (
+                                        <div key={guest.id} className="p-3 flex justify-between items-center bg-white rounded-xl border border-slate-100 shadow-sm">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 text-[10px] font-bold">
+                                                    {idx + 1}
+                                                </div>
+                                                <div>
+                                                    <p className="font-bold text-slate-800 text-xs">{guest.name}</p>
+                                                    <p className="text-[9px] text-slate-400 font-bold flex items-center gap-1"><Phone size={8}/> {guest.phone || '-'}</p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="text-[10px] font-bold bg-slate-50 px-2 py-0.5 rounded border border-slate-100 text-slate-600 mr-2">{guest.seatCount} সিট</span>
+                                                <span className="text-[10px] font-black text-emerald-600">৳{guest.collection}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
-
-                {/* 2. GUEST MANAGEMENT */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden animate-fade-in">
-                    <div className="px-5 py-4 border-b border-slate-50 flex justify-between items-center bg-white sticky top-0 z-10">
-                        <h3 className="font-bold text-slate-700 text-[10px] uppercase tracking-widest flex items-center gap-2">
-                            <Users size={14} className="text-slate-400"/> গেস্ট লিস্ট
-                        </h3>
-                        {/* Can add bookings if it's All Tours (new booking) or My Bookings */}
-                        {(activeTab === 'all' || activeTab === 'my') && (
-                            <button 
-                                onClick={() => setIsAddingBooking(!isAddingBooking)} 
-                                className="text-[9px] font-bold bg-slate-900 text-white px-3 py-1.5 rounded-lg uppercase tracking-wide flex items-center gap-1.5 shadow-md hover:bg-slate-800 transition-all"
-                            >
-                                <Plus size={12}/> নতুন গেস্ট
-                            </button>
-                        )}
-                    </div>
-
-                    {isAddingBooking && (activeTab === 'all' || activeTab === 'my') && (
-                        <div className="p-5 bg-slate-50 border-b border-slate-100 animate-fade-in">
-                            <div className="grid grid-cols-1 gap-3 mb-4">
-                                <div>
-                                    <label className="text-[9px] font-bold text-slate-400 uppercase ml-1 block mb-1">নাম</label>
-                                    <input className="w-full border border-slate-200 bg-white p-3 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100" placeholder="নাম" value={newBooking.name} onChange={e => setNewBooking({...newBooking, name: e.target.value})} />
-                                </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label className="text-[9px] font-bold text-slate-400 uppercase ml-1 block mb-1">মোবাইল</label>
-                                        <input className="w-full border border-slate-200 bg-white p-3 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100" placeholder="ফোন" value={newBooking.phone} onChange={e => setNewBooking({...newBooking, phone: e.target.value})} />
-                                    </div>
-                                    <div>
-                                        <label className="text-[9px] font-bold text-slate-400 uppercase ml-1 block mb-1">সিট</label>
-                                        <input type="number" className="w-full border border-slate-200 bg-white p-3 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100" placeholder="1" value={newBooking.seatCount} onChange={e => setNewBooking({...newBooking, seatCount: e.target.value})} />
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="text-[9px] font-bold text-slate-400 uppercase ml-1 block mb-1">কালেকশন (বাকি)</label>
-                                    <input type="number" className="w-full border border-emerald-200 bg-emerald-50/50 p-3 rounded-xl text-xs font-bold text-emerald-700 outline-none focus:ring-2 focus:ring-emerald-100" placeholder="0" value={newBooking.unitPrice} onChange={e => setNewBooking({...newBooking, unitPrice: e.target.value})} />
-                                </div>
-                            </div>
-                            <div className="flex justify-end gap-2">
-                                <button onClick={() => setIsAddingBooking(false)} className="px-4 py-2 rounded-lg text-slate-500 font-bold text-[10px] hover:bg-slate-200">বাতিল</button>
-                                <button onClick={handleAddBooking} className="px-5 py-2 bg-blue-600 text-white rounded-lg font-bold text-[10px] shadow-md hover:bg-blue-700">কনফার্ম</button>
-                            </div>
-                        </div>
-                    )}
-
-                    {!hasGuests ? (
-                        <div className="p-10 text-center text-slate-400 text-xs font-bold italic">কোনো গেস্ট নেই।</div>
-                    ) : (
-                        <div className="space-y-2 p-4 bg-slate-50/30">
-                            {myAgencyData.guests.map((guest, idx) => (
-                                <div key={guest.id} className="p-3 flex justify-between items-center bg-white rounded-xl border border-slate-100 shadow-sm">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 text-[10px] font-bold">
-                                            {idx + 1}
-                                        </div>
-                                        <div>
-                                            <p className="font-bold text-slate-800 text-xs">{guest.name}</p>
-                                            <p className="text-[9px] text-slate-400 font-bold flex items-center gap-1"><Phone size={8}/> {guest.phone || '-'}</p>
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <span className="text-[10px] font-bold bg-slate-50 px-2 py-0.5 rounded border border-slate-100 text-slate-600 mr-2">{guest.seatCount} সিট</span>
-                                        <span className="text-[10px] font-black text-emerald-600">৳{guest.collection}</span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
             </>
         )}
+
       </div>
+
+      {/* --- BOOKING MODAL --- */}
+      {isBookingModalOpen && targetTour && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+              <div className="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl overflow-hidden relative">
+                  <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                      <div>
+                          <h3 className="font-black text-slate-800 text-sm">{targetTour.name}</h3>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">নতুন বুকিং</p>
+                      </div>
+                      <button onClick={closeBookingModal} className="p-2 bg-white rounded-full text-slate-400 hover:text-rose-500 transition-colors shadow-sm">
+                          <X size={16} />
+                      </button>
+                  </div>
+                  
+                  <div className="p-6 space-y-4">
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">গেস্ট নাম</label>
+                          <input 
+                            value={newBooking.name}
+                            onChange={e => setNewBooking({...newBooking, name: e.target.value})}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-300"
+                            placeholder="পুরো নাম"
+                          />
+                      </div>
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">মোবাইল নম্বর</label>
+                          <input 
+                            value={newBooking.phone}
+                            onChange={e => setNewBooking({...newBooking, phone: e.target.value})}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-300"
+                            placeholder="017..."
+                          />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">মোট সিট</label>
+                              <input 
+                                type="number"
+                                value={newBooking.seatCount}
+                                onChange={e => setNewBooking({...newBooking, seatCount: e.target.value})}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-center outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-300"
+                                placeholder="0"
+                              />
+                          </div>
+                          <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">মোট কালেকশন</label>
+                              <input 
+                                type="number"
+                                value={newBooking.unitPrice}
+                                onChange={e => setNewBooking({...newBooking, unitPrice: e.target.value})}
+                                className="w-full bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm font-bold text-center text-emerald-700 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all placeholder:text-emerald-300"
+                                placeholder="0"
+                              />
+                          </div>
+                      </div>
+                  </div>
+
+                  <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
+                      <button onClick={closeBookingModal} className="flex-1 py-3 text-slate-500 font-bold text-xs rounded-xl hover:bg-slate-200 transition-colors">
+                          বাতিল
+                      </button>
+                      <button onClick={handleConfirmBooking} className="flex-[2] py-3 bg-indigo-600 text-white font-bold text-xs rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 hover:scale-[1.02] transition-all flex justify-center items-center gap-2">
+                          <CheckCircle size={16}/> কনফার্ম করুন
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
     </div>
   );
 };
