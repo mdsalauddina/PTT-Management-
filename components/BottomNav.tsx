@@ -1,7 +1,5 @@
-
-
 import React from 'react';
-import { FolderPlus, BarChart3, UserCircle, Users, CheckSquare, List } from 'lucide-react';
+import { FolderPlus, BarChart3, UserCircle, Users, CheckSquare, List, Wallet } from 'lucide-react';
 import { TabId, UserProfile } from '../types';
 
 interface BottomNavProps {
@@ -22,6 +20,7 @@ const BottomNav: React.FC<BottomNavProps> = ({ currentTab, setTab, user }) => {
     { id: 'personal', label: 'পার্সোনাল', icon: UserCircle, role: ['admin'] },
     { id: 'share', label: 'পার্টনার', icon: Users, role: ['admin'] },
     { id: 'guest_list', label: 'গেস্ট', icon: List, role: ['admin', 'host'] },
+    { id: 'settlement', label: 'সেটেলমেন্ট', icon: Wallet, role: ['host'] },
     { id: 'final', label: 'ফাইনাল', icon: CheckSquare, role: ['admin'] },
   ];
 

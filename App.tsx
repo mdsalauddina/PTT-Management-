@@ -1,11 +1,9 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { auth, db } from './services/firebase';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, collection, query, orderBy, getDocs } from 'firebase/firestore';
 import { UserProfile, TabId, Tour } from './types';
-import { LogOut, LayoutGrid, FolderPlus, BarChart3, UserCircle, Users, CheckSquare, Lock, List } from 'lucide-react';
+import { LogOut, LayoutGrid, FolderPlus, BarChart3, UserCircle, Users, CheckSquare, Lock, List, Wallet } from 'lucide-react';
 
 // Components
 import EntryTab from './components/EntryTab';
@@ -17,6 +15,7 @@ import BottomNav from './components/BottomNav';
 import LoginScreen from './components/LoginScreen';
 import AgencyDashboard from './components/AgencyDashboard';
 import HostGuestList from './components/HostGuestList';
+import HostSettlement from './components/HostSettlement';
 
 const App = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -196,6 +195,7 @@ const App = () => {
       case 'share': return <ShareTourTab {...commonProps} />;
       case 'final': return <FinalTab {...commonProps} />;
       case 'guest_list': return <HostGuestList {...commonProps} />;
+      case 'settlement': return <HostSettlement {...commonProps} />;
       default: return <EntryTab {...commonProps} />;
     }
   };
@@ -206,6 +206,7 @@ const App = () => {
     { id: 'personal', label: 'পার্সোনাল', icon: UserCircle, role: ['admin'] },
     { id: 'share', label: 'পার্টনার', icon: Users, role: ['admin'] },
     { id: 'guest_list', label: 'গেস্ট লিস্ট', icon: List, role: ['host', 'admin'] },
+    { id: 'settlement', label: 'সেটেলমেন্ট', icon: Wallet, role: ['host'] },
     { id: 'final', label: 'ফাইনাল', icon: CheckSquare, role: ['admin'] },
   ];
   

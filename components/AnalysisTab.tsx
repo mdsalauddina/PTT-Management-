@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, PersonalData } from '../types';
 import { db } from '../services/firebase';
@@ -80,8 +78,11 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
     : 0;
 
   const totalBooked = agencyGuests + personalGuestCount;
-  const totalSeats = Number(activeTour.busConfig.totalSeats) || 40;
-  const occupancyRate = Math.min((totalBooked / totalSeats) * 100, 100);
+  
+  // CHANGED: Total seats based on Regular Seats as requested
+  const totalSeats = Number(activeTour.busConfig.regularSeats) || 40;
+  
+  const occupancyRate = totalSeats > 0 ? Math.min((totalBooked / totalSeats) * 100, 100) : 0;
   const vacantSeats = Math.max(0, totalSeats - totalBooked);
 
   const agencyCollection = activeTour.partnerAgencies 
@@ -119,7 +120,7 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
   const dailyExpensesTotal = calculateTotalDailyExpenses(activeTour);
   // Including Other Fixed Costs in variable portion for Buy Rate
   const variableCostPerHead = (totalHostFee + totalHotelCost + totalOtherFixed + dailyExpensesTotal) / totalSeats;
-  const busFares = calculateBusFare(activeTour.busConfig);
+  const busFares = calculateBusFare(activeTour.busConfig); // Note: busFare calc might need adjustment if it uses totalSeats internally differently
 
   const costPerSeat = {
       regular: Math.ceil(busFares.regularFare + variableCostPerHead),
@@ -140,18 +141,18 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
   return (
     <div className="space-y-4 animate-fade-in pb-20 max-w-5xl mx-auto font-sans text-slate-800">
       {/* Compact Selector */}
-      <div className="flex items-center justify-between bg-white px-4 py-3 rounded-2xl border border-slate-200 shadow-sm sticky top-0 z-20">
-        <div className="flex items-center gap-3">
-            <div className="p-2 bg-violet-50 text-violet-600 rounded-xl">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between bg-white px-4 py-3 rounded-2xl border border-slate-200 shadow-sm sticky top-0 z-20 gap-3">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="p-2 bg-violet-50 text-violet-600 rounded-xl shrink-0">
                 <Activity size={16} />
             </div>
-            <div>
+            <div className="flex-1 min-w-0">
                 <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">ট্যুর নির্বাচন</p>
                 <div className="relative group -mt-1">
                     <select 
                         value={selectedTourId}
                         onChange={(e) => setSelectedTourId(e.target.value)}
-                        className="appearance-none bg-transparent font-bold text-slate-700 text-sm focus:outline-none cursor-pointer pr-6 py-0.5"
+                        className="w-full appearance-none bg-transparent font-bold text-slate-700 text-sm focus:outline-none cursor-pointer pr-6 py-0.5 truncate"
                     >
                         {tours.map(t => <option key={t.id} value={t.id}>{t.name} ({t.date})</option>)}
                     </select>
@@ -159,27 +160,27 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
                 </div>
             </div>
         </div>
-        <div className={`px-3 py-1 rounded-full text-[10px] font-bold border ${netProfit >= 0 ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
-            {netProfit >= 0 ? `লাভ: ৳${netProfit}` : `লস: ৳${Math.abs(netProfit)}`}
+        <div className={`px-3 py-1.5 rounded-full text-[10px] font-bold border text-center whitespace-nowrap ${netProfit >= 0 ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
+            {netProfit >= 0 ? `লাভ: ৳${netProfit.toLocaleString()}` : `লস: ৳${Math.abs(netProfit).toLocaleString()}`}
         </div>
       </div>
       
       {/* Top Stats Compact Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         {/* Occupancy */}
-        <div className="col-span-2 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
+        <div className="md:col-span-2 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
             <div>
                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">মোট বুকিং</p>
                 <div className="flex items-baseline gap-1">
                     <span className="text-2xl font-black text-slate-800">{totalBooked}</span>
                     <span className="text-[10px] font-bold text-slate-400">/ {totalSeats} সিট</span>
                 </div>
-                <div className="flex gap-1.5 mt-2">
-                    <span className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 font-bold">এজেন্সি: {agencyGuests}</span>
-                    <span className="text-[9px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded border border-purple-100 font-bold">নিজস্ব: {personalGuestCount}</span>
+                <div className="flex gap-1.5 mt-2 flex-wrap">
+                    <span className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 font-bold whitespace-nowrap">এজেন্সি: {agencyGuests}</span>
+                    <span className="text-[9px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded border border-purple-100 font-bold whitespace-nowrap">নিজস্ব: {personalGuestCount}</span>
                 </div>
             </div>
-            <div className="w-16 h-16 relative">
+            <div className="w-16 h-16 relative shrink-0">
                  <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                         <Pie data={seatData} innerRadius={18} outerRadius={30} paddingAngle={0} dataKey="value" stroke="none">
@@ -194,32 +195,34 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
         </div>
 
         {/* Income vs Expense Mini Cards */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center">
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1"><TrendingUp size={10} className="text-emerald-500"/> মোট আয়</p>
-            <p className="text-xl font-black text-emerald-600 tracking-tight">৳{totalIncome.toLocaleString()}</p>
-        </div>
-        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center">
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1"><Wallet size={10} className="text-rose-500"/> মোট ব্যয়</p>
-            <p className="text-xl font-black text-rose-500 tracking-tight">৳{totalExpenses.toLocaleString()}</p>
+        <div className="grid grid-cols-2 gap-3 md:col-span-2">
+            <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center">
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1"><TrendingUp size={10} className="text-emerald-500"/> মোট আয়</p>
+                <p className="text-lg sm:text-xl font-black text-emerald-600 tracking-tight truncate">৳{totalIncome.toLocaleString()}</p>
+            </div>
+            <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center">
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1"><Wallet size={10} className="text-rose-500"/> মোট ব্যয়</p>
+                <p className="text-lg sm:text-xl font-black text-rose-500 tracking-tight truncate">৳{totalExpenses.toLocaleString()}</p>
+            </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Detailed Cost Breakdown Table */}
-          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
              <div className="px-5 py-3 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
                  <h3 className="text-[11px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
-                     <Activity size={14} className="text-slate-400"/> খরচের ব্রেকডাউন ও জনপ্রতি খরচ
+                     <Activity size={14} className="text-slate-400"/> খরচের ব্রেকডাউন
                  </h3>
              </div>
              
-             <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
+             <div className="overflow-x-auto flex-1">
+                <table className="w-full text-left border-collapse min-w-[300px]">
                     <thead>
                         <tr className="border-b border-slate-100">
                             <th className="p-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider">খাত</th>
-                            <th className="p-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-right">মোট খরচ</th>
-                            <th className="p-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-right bg-slate-50/50">জনপ্রতি (সিট)</th>
+                            <th className="p-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-right">মোট</th>
+                            <th className="p-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-right bg-slate-50/50">জনপ্রতি</th>
                         </tr>
                     </thead>
                     <tbody className="text-xs font-bold text-slate-600">
@@ -228,12 +231,12 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
                             { label: 'হোটেল ভাড়া', total: totalHotelCost, icon: Building, color: 'text-indigo-600' },
                             { label: 'খাবার', total: totalDailyMeals, icon: Utensils, color: 'text-orange-600' },
                             { label: 'লোকাল গাড়ি', total: totalDailyTransport, icon: Car, color: 'text-blue-600' },
-                            { label: 'ম্যানেজমেন্ট (Host)', total: totalHostFee, icon: Users, color: 'text-teal-600' },
-                            { label: 'অন্যান্য ফিক্সড খরচ', total: totalOtherFixed, icon: PlusCircle, color: 'text-teal-500' },
+                            { label: 'ম্যানেজমেন্ট', total: totalHostFee, icon: Users, color: 'text-teal-600' },
+                            { label: 'অন্যান্য ফিক্সড', total: totalOtherFixed, icon: PlusCircle, color: 'text-teal-500' },
                             { label: 'দৈনিক অন্যান্য', total: totalDailyExtra, icon: Coffee, color: 'text-slate-600' },
                         ].map((item, i) => (
                             <tr key={i} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                                <td className="p-3 flex items-center gap-2">
+                                <td className="p-3 flex items-center gap-2 whitespace-nowrap">
                                     <div className={`w-1.5 h-1.5 rounded-full ${item.color.replace('text', 'bg')}`}></div>
                                     {item.label}
                                 </td>
@@ -284,7 +287,7 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
           <h3 className="text-[11px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-2 mb-4">
               <Tags size={14} className="text-slate-400"/> সিট টাইপ অনুযায়ী আসল খরচ (Buy Rate)
           </h3>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="bg-violet-50 p-4 rounded-xl border border-violet-100 text-center">
                   <p className="text-[9px] font-bold text-violet-400 uppercase mb-1">রেগুলার সিট</p>
                   <p className="text-xl font-black text-violet-700">৳{costPerSeat.regular}</p>
@@ -298,8 +301,8 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
                   <p className="text-xl font-black text-orange-600">৳{costPerSeat.d2}</p>
               </div>
           </div>
-          <p className="text-[9px] text-slate-400 mt-3 text-center">
-              * এই খরচ = বাস ভাড়া (টাইপ ভিত্তিক) + (ফিক্সড খরচ + অন্যান্য ফিক্সড + দৈনিক খরচ) ÷ মোট সিট
+          <p className="text-[9px] text-slate-400 mt-3 text-center leading-relaxed">
+              * খরচ = বাস ভাড়া (টাইপ ভিত্তিক) + (ফিক্সড খরচ + দৈনিক খরচ) ÷ মোট সিট ({totalSeats})
           </p>
       </div>
 

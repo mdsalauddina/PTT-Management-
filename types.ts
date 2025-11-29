@@ -104,7 +104,7 @@ export interface PersonalData {
   updatedAt: any;
 }
 
-export type TabId = 'entry' | 'analysis' | 'personal' | 'share' | 'final' | 'guest_list';
+export type TabId = 'entry' | 'analysis' | 'personal' | 'share' | 'final' | 'guest_list' | 'settlement';
 
 // Shared Props Interface
 export interface CommonTabProps {

@@ -80,7 +80,16 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
           const currentExpenses = prev.costs?.dailyExpenses || [];
           let newExpenses: DailyExpense[] = [];
           for (let i = 0; i < currentDuration; i++) {
-              newExpenses.push(currentExpenses[i] || { day: i + 1, breakfast: 0, lunch: 0, dinner: 0, transport: 0, other: 0 });
+              const existing = currentExpenses[i];
+              // Ensure all fields exist properly to prevent uncontrolled inputs
+              newExpenses.push({
+                  day: i + 1,
+                  breakfast: existing?.breakfast || 0,
+                  lunch: existing?.lunch || 0,
+                  dinner: existing?.dinner || 0,
+                  transport: existing?.transport || 0,
+                  other: existing?.other || 0
+              });
           }
           return { ...prev, costs: { ...prev.costs!, dailyExpenses: newExpenses } };
       });
@@ -143,9 +152,10 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
           let updateData;
           if (user.role === 'host') {
              // Host can update Daily Expenses AND Extra Fixed Costs
+             // IMPORTANT: Fallback to [] if undefined to prevent Firestore error
              updateData = {
-                 'costs.dailyExpenses': tourData.costs?.dailyExpenses,
-                 'costs.otherFixedCosts': tourData.costs?.otherFixedCosts,
+                 'costs.dailyExpenses': tourData.costs?.dailyExpenses || [],
+                 'costs.otherFixedCosts': tourData.costs?.otherFixedCosts || [],
                  updatedAt: Timestamp.now()
              };
           } else {
