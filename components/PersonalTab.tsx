@@ -5,7 +5,7 @@ import { CommonTabProps, PersonalData, Guest } from '../types';
 import { db } from '../services/firebase';
 import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
 import { calculatePersonalSettlement, safeNum } from '../utils/calculations';
-import { Save, PlusCircle, Trash2, Receipt, Minus, Plus, UserCircle, ChevronDown, Wallet, ArrowRight, UserPlus, Phone, Armchair, Tag, Calculator } from 'lucide-react';
+import { Save, PlusCircle, Trash2, Receipt, UserCircle, ChevronDown, Wallet, ArrowRight, UserPlus, Phone, Armchair, Tag, Settings, Calculator, Users } from 'lucide-react';
 
 const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
   const [selectedTourId, setSelectedTourId] = useState<string>('');
@@ -22,14 +22,23 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
     bookingFee: 0,
     customExpenses: [],
     guests: [],
+    customPricing: { baseFee: 0, d1Amount: 0, d2Amount: 0 },
     updatedAt: null
   });
 
-  // State for Manual Counter Logic
-  const [manualTotalGuests, setManualTotalGuests] = useState(0);
-
   const [isAddingGuest, setIsAddingGuest] = useState(false);
-  const [newGuest, setNewGuest] = useState({ name: '', phone: '', seatCount: '', unitPrice: '', seatNumbers: '', seatType: 'regular' });
+  const [showPricingEdit, setShowPricingEdit] = useState(false);
+  
+  // New Guest Form State
+  const [newGuest, setNewGuest] = useState({
+      name: '',
+      phone: '',
+      seatNumbers: '',
+      regCount: '',
+      d1Count: '',
+      d2Count: '',
+      manualCollection: '' // Optional override
+  });
 
   useEffect(() => {
     if (tours.length > 0 && !selectedTourId) {
@@ -51,12 +60,14 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
           if (!data.customExpenses) data.customExpenses = [];
           if (!data.guests) data.guests = [];
           
+          if (!data.customPricing) {
+              data.customPricing = {
+                  baseFee: safeNum(activeTour.fees?.regular),
+                  d1Amount: safeNum(activeTour.busConfig?.discount1Amount),
+                  d2Amount: safeNum(activeTour.busConfig?.discount2Amount)
+              };
+          }
           setPersonalData(data);
-          
-          // Initialize manual total if using counters
-          const total = safeNum(data.personalStandardCount) + safeNum(data.personalDisc1Count) + safeNum(data.personalDisc2Count);
-          setManualTotalGuests(total);
-
         } else {
              setPersonalData({
                 tourId: activeTour.id,
@@ -70,9 +81,13 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
                 bookingFee: 0,
                 customExpenses: [],
                 guests: [],
+                customPricing: {
+                    baseFee: safeNum(activeTour.fees?.regular),
+                    d1Amount: safeNum(activeTour.busConfig?.discount1Amount),
+                    d2Amount: safeNum(activeTour.busConfig?.discount2Amount)
+                },
                 updatedAt: null
              });
-             setManualTotalGuests(0);
         }
       } catch (err) {
         console.error("Error fetching personal data", err);
@@ -81,15 +96,37 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
     fetchPersonalData();
   }, [activeTour, user.uid]);
 
+  const settlement = calculatePersonalSettlement(activeTour || {} as any, personalData);
+
+  // Sync summary counters for display
+  useEffect(() => {
+      if(personalData.guests) {
+          const currentD1 = personalData.guests.reduce((sum, g) => sum + (g.paxBreakdown?.disc1 || 0), 0);
+          const currentD2 = personalData.guests.reduce((sum, g) => sum + (g.paxBreakdown?.disc2 || 0), 0);
+          const currentReg = personalData.guests.reduce((sum, g) => sum + (g.paxBreakdown?.regular || 0), 0);
+          
+          if (currentReg !== personalData.personalStandardCount || currentD1 !== personalData.personalDisc1Count || currentD2 !== personalData.personalDisc2Count) {
+             setPersonalData(prev => ({
+                 ...prev, 
+                 personalStandardCount: currentReg,
+                 personalDisc1Count: currentD1,
+                 personalDisc2Count: currentD2
+             }));
+          }
+      }
+  }, [personalData.guests]);
+
+
   const handleSave = async () => {
     if (!activeTour) return;
     try {
       const docRef = doc(db, 'personal', `${activeTour.id}_${user.uid}`);
       await setDoc(docRef, { ...personalData, updatedAt: Timestamp.now() });
-      alert("তথ্য সেভ হয়েছে!");
+      alert("সেভ হয়েছে!");
+      setShowPricingEdit(false);
     } catch (err) {
       console.error(err);
-      alert("সেভ করা যায়নি।");
+      alert("সেভ ব্যর্থ।");
     }
   };
 
@@ -103,279 +140,207 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
     setPersonalData({ ...personalData, customExpenses: updated });
   };
 
-  // Sync counters with guest list OR Manual Input
-  useEffect(() => {
-      if(personalData.guests && personalData.guests.length > 0) {
-          // If guest list exists, counters are strictly derived from list
-          const currentD1 = personalData.guests.filter(g => g.seatType === 'disc1').reduce((sum, g) => sum + (Number(g.seatCount)||1), 0);
-          const currentD2 = personalData.guests.filter(g => g.seatType === 'disc2').reduce((sum, g) => sum + (Number(g.seatCount)||1), 0);
-          const currentReg = personalData.guests.filter(g => g.seatType === 'regular').reduce((sum, g) => sum + (Number(g.seatCount)||1), 0);
-          
-          setPersonalData(prev => ({
-              ...prev, 
-              personalStandardCount: currentReg,
-              personalDisc1Count: currentD1,
-              personalDisc2Count: currentD2
-          }));
-          setManualTotalGuests(currentReg + currentD1 + currentD2);
-      } else {
-          // Auto Calculate Regular based on Total - (D1 + D2)
-          const d1 = safeNum(personalData.personalDisc1Count);
-          const d2 = safeNum(personalData.personalDisc2Count);
-          const regular = Math.max(0, manualTotalGuests - (d1 + d2));
-          
-          // Avoid infinite loop by checking if value actually changed
-          if (regular !== personalData.personalStandardCount) {
-               setPersonalData(prev => ({ ...prev, personalStandardCount: regular }));
-          }
-      }
-  }, [personalData.guests, manualTotalGuests, personalData.personalDisc1Count, personalData.personalDisc2Count]);
-
-
-  const handlePackageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const type = e.target.value as 'regular' | 'disc1' | 'disc2';
-      let price = 0;
-      if (activeTour?.fees) {
-          if (type === 'regular') price = Number(activeTour.fees.regular);
-          if (type === 'disc1') price = Number(activeTour.fees.disc1);
-          if (type === 'disc2') price = Number(activeTour.fees.disc2);
-      }
-      setNewGuest({ ...newGuest, seatType: type, unitPrice: price.toString() });
+  // --- NEW GUEST LOGIC ---
+  const calculateNewGuestPayable = () => {
+      const reg = safeNum(newGuest.regCount);
+      const d1 = safeNum(newGuest.d1Count);
+      const d2 = safeNum(newGuest.d2Count);
+      
+      const fees = settlement.fees;
+      return (reg * fees.regFee) + (d1 * fees.d1Fee) + (d2 * fees.d2Fee);
   };
 
   const handleAddGuest = () => {
       if(!newGuest.name) return;
-      const seatCount = parseInt(newGuest.seatCount) || 1;
-      const unitPrice = parseInt(newGuest.unitPrice) || 0;
+      
+      const reg = safeNum(newGuest.regCount);
+      const d1 = safeNum(newGuest.d1Count);
+      const d2 = safeNum(newGuest.d2Count);
+      const totalSeats = reg + d1 + d2;
+      
+      if (totalSeats === 0) {
+          alert("কমপক্ষে ১ জন গেস্ট দিন");
+          return;
+      }
+
+      const calculatedCollection = calculateNewGuestPayable();
+      const finalCollection = newGuest.manualCollection ? safeNum(newGuest.manualCollection) : calculatedCollection;
       
       const g: Guest = {
           id: Date.now().toString(),
           name: newGuest.name,
           phone: newGuest.phone,
-          seatCount: seatCount,
+          seatCount: totalSeats,
           seatNumbers: newGuest.seatNumbers,
-          unitPrice: unitPrice,
-          collection: seatCount * unitPrice,
-          seatType: newGuest.seatType as 'regular' | 'disc1' | 'disc2'
+          unitPrice: 0, // Not used in new logic, collection is primary
+          collection: finalCollection,
+          seatType: 'regular', // Legacy fallback
+          paxBreakdown: { regular: reg, disc1: d1, disc2: d2 }
       };
       
       setPersonalData({...personalData, guests: [...(personalData.guests || []), g]});
-      setNewGuest({ name: '', phone: '', seatCount: '', unitPrice: '', seatNumbers: '', seatType: 'regular' });
+      setNewGuest({ name: '', phone: '', seatNumbers: '', regCount: '', d1Count: '', d2Count: '', manualCollection: '' });
       setIsAddingGuest(false);
   };
   
   const removeGuest = (id: string) => {
+      if(!window.confirm("মুছে ফেলবেন?")) return;
       setPersonalData({...personalData, guests: personalData.guests?.filter(g => g.id !== id)});
   };
 
-  const settlement = calculatePersonalSettlement(activeTour || {} as any, personalData);
-  const hasGuestList = personalData.guests && personalData.guests.length > 0;
-
-  if (!activeTour) return (
-    <div className="h-full flex flex-col items-center justify-center p-10 text-center text-slate-400">
-        <div className="bg-slate-100 p-6 rounded-full mb-4"><UserCircle size={32} /></div>
-        <p className="font-bold text-sm">কোন ট্যুর ডাটা পাওয়া যায়নি</p>
-    </div>
-  );
-  
+  if (!activeTour) return <div className="p-10 text-center text-xs text-slate-400">লোড হচ্ছে...</div>;
   const isAdmin = user.role === 'admin';
 
   return (
-    <div className="p-4 space-y-8 animate-fade-in pb-24 lg:pb-10 max-w-3xl mx-auto font-sans">
+    <div className="p-4 pb-24 lg:pb-10 max-w-2xl mx-auto font-sans space-y-4">
       {/* Selector */}
-      <div className="bg-white p-2.5 rounded-3xl shadow-lg shadow-slate-200/50 border border-slate-100 flex items-center gap-4 relative z-20">
-        <div className="p-3 bg-indigo-50 rounded-2xl text-indigo-600 ring-4 ring-indigo-50/50 shrink-0">
-            <UserCircle size={20} />
+      <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3 relative z-20">
+        <div className="p-2 bg-indigo-50 rounded-xl text-indigo-600">
+            <UserCircle size={16} />
         </div>
         <div className="flex-1 min-w-0">
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">ব্যক্তিগত হিসাব</label>
+            <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">পার্সোনাল হিসাব</label>
             <div className="relative">
                 <select 
                     value={selectedTourId}
                     onChange={(e) => setSelectedTourId(e.target.value)}
-                    className="w-full appearance-none bg-transparent text-slate-800 text-lg font-black focus:outline-none cursor-pointer pr-8 truncate"
+                    className="w-full appearance-none bg-transparent text-slate-800 text-sm font-black focus:outline-none cursor-pointer pr-6 truncate"
                 >
                     {tours.map(t => <option key={t.id} value={t.id}>{t.name} ({t.date})</option>)}
                 </select>
-                <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} strokeWidth={2.5} />
+                <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
             </div>
         </div>
       </div>
 
-      <div className="flex justify-between items-center bg-white/70 backdrop-blur-md p-4 rounded-3xl shadow-lg border border-white/50 sticky top-4 z-10 transition-all">
-        <div className="pl-2">
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">একশন</p>
-            <h2 className="font-bold text-slate-700 text-sm">আপডেট ও সেভ</h2>
-        </div>
-        <button 
-            onClick={handleSave} 
-            className="flex items-center gap-2 bg-slate-900 text-white px-6 py-3.5 rounded-2xl font-bold shadow-xl shadow-slate-300 transition-all active:scale-95 text-xs uppercase tracking-wide hover:bg-slate-800 hover:scale-105"
-        >
-            <Save size={16} /> <span className="hidden sm:inline">সেভ করুন</span>
-        </button>
-      </div>
-
-      {/* GUEST COUNT SUMMARY (Manual or Derived) */}
-      <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden p-6">
-          <div className="flex items-center gap-2 mb-4">
-               <Calculator size={16} className="text-violet-500"/>
-               <h3 className="font-bold text-slate-700 text-xs uppercase tracking-widest">সিট সামারি</h3>
-          </div>
-          
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-               {/* Total - Manual Input if no guest list */}
-               <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
-                   <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">মোট গেস্ট</label>
-                   {hasGuestList ? (
-                       <p className="font-black text-slate-800 text-xl">{manualTotalGuests}</p>
-                   ) : (
-                       <input 
-                          type="number" 
-                          value={manualTotalGuests}
-                          onChange={(e) => setManualTotalGuests(safeNum(e.target.value))}
-                          className="w-full bg-white border border-slate-200 rounded-lg text-center font-black text-lg py-1 outline-none focus:ring-2 focus:ring-violet-200"
-                       />
-                   )}
-               </div>
-
-               {/* Disc 1 - Manual Input */}
-               <div className="bg-amber-50 p-3 rounded-xl border border-amber-100 text-center">
-                   <label className="text-[9px] font-bold text-amber-500 uppercase block mb-1">ডিসকাউন্ট ১</label>
-                   {hasGuestList ? (
-                       <p className="font-black text-amber-700 text-xl">{personalData.personalDisc1Count}</p>
-                   ) : (
-                       <input 
-                          type="number" 
-                          value={personalData.personalDisc1Count}
-                          onChange={(e) => setPersonalData({...personalData, personalDisc1Count: safeNum(e.target.value)})}
-                          className="w-full bg-white border border-amber-200 text-amber-700 rounded-lg text-center font-black text-lg py-1 outline-none focus:ring-2 focus:ring-amber-200"
-                       />
-                   )}
-               </div>
-
-               {/* Disc 2 - Manual Input */}
-               <div className="bg-orange-50 p-3 rounded-xl border border-orange-100 text-center">
-                   <label className="text-[9px] font-bold text-orange-500 uppercase block mb-1">ডিসকাউন্ট ২</label>
-                   {hasGuestList ? (
-                       <p className="font-black text-orange-700 text-xl">{personalData.personalDisc2Count}</p>
-                   ) : (
-                       <input 
-                          type="number" 
-                          value={personalData.personalDisc2Count}
-                          onChange={(e) => setPersonalData({...personalData, personalDisc2Count: safeNum(e.target.value)})}
-                          className="w-full bg-white border border-orange-200 text-orange-700 rounded-lg text-center font-black text-lg py-1 outline-none focus:ring-2 focus:ring-orange-200"
-                       />
-                   )}
-               </div>
-
-               {/* Regular - Auto Calculated */}
-               <div className="bg-violet-50 p-3 rounded-xl border border-violet-100 text-center relative overflow-hidden">
-                   <div className="absolute top-0 right-0 bg-violet-200 text-violet-700 text-[8px] font-bold px-1.5 py-0.5 rounded-bl-lg">AUTO</div>
-                   <label className="text-[9px] font-bold text-violet-500 uppercase block mb-1">রেগুলার</label>
-                   <p className="font-black text-violet-700 text-xl">{personalData.personalStandardCount}</p>
-               </div>
-          </div>
-          <p className="text-[9px] text-slate-400 text-center mt-3">* রেগুলার সিট = মোট গেস্ট - (ডিসকাউন্ট ১ + ডিসকাউন্ট ২)</p>
-      </div>
-      
-      {/* Guest List Card */}
-      <div className="bg-white rounded-[2.5rem] shadow-lg shadow-slate-200/50 border border-slate-100 overflow-hidden">
-        <div className="px-6 py-5 border-b border-slate-50 flex justify-between items-center bg-white">
-            <h3 className="font-bold text-slate-700 text-xs uppercase tracking-widest flex items-center gap-2">
-                <div className="p-2 bg-indigo-50 rounded-xl"><UserPlus size={16} className="text-indigo-500"/></div>
-                গেস্ট লিস্ট
-            </h3>
+      {/* Action Bar */}
+      <div className="flex justify-between items-center bg-white/80 backdrop-blur-md p-3 rounded-2xl shadow-sm border border-slate-200 sticky top-4 z-10">
+         <div className="flex items-center gap-2">
             <button 
-                onClick={() => setIsAddingGuest(!isAddingGuest)}
-                className="text-[10px] font-bold bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl border border-indigo-100 flex items-center gap-2 hover:bg-indigo-100 transition-colors uppercase tracking-wide"
+                onClick={() => setShowPricingEdit(!showPricingEdit)} 
+                className={`p-2 rounded-xl transition-colors border ${showPricingEdit ? 'bg-slate-100 border-slate-300 text-slate-800' : 'bg-white border-slate-100 text-slate-500'}`}
             >
-                <Plus size={12}/> নতুন
+                <Settings size={16}/>
+            </button>
+            <div className="text-[10px] font-bold text-slate-500">
+                <span className="block text-[8px] uppercase text-slate-400">মোট লাভ/লস</span>
+                <span className={settlement.netResult >= 0 ? "text-emerald-600" : "text-rose-600"}>{settlement.netResult}৳</span>
+            </div>
+         </div>
+         <button 
+            onClick={handleSave} 
+            className="flex items-center gap-1.5 bg-slate-900 text-white px-4 py-2 rounded-xl font-bold shadow-md hover:bg-slate-800 active:scale-95 text-[10px] uppercase tracking-wider transition-all"
+         >
+            <Save size={14} /> সেভ
+         </button>
+      </div>
+
+      {/* PRICING CONFIG */}
+      {showPricingEdit && (
+          <div className="p-4 bg-white rounded-2xl shadow-sm border border-slate-100 animate-fade-in">
+              <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">প্যাকেজ মূল্য নির্ধারণ</h3>
+              <div className="grid grid-cols-3 gap-2">
+                  <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                      <label className="text-[8px] font-bold text-slate-400 block mb-1">রেগুলার</label>
+                      <input type="number" value={personalData.customPricing?.baseFee} onChange={e => setPersonalData({...personalData, customPricing: { ...personalData.customPricing!, baseFee: safeNum(e.target.value) }})} className="w-full bg-transparent text-sm font-black text-slate-700 outline-none border-b border-slate-200" />
+                  </div>
+                  <div className="bg-amber-50 p-2 rounded-xl border border-amber-100">
+                      <label className="text-[8px] font-bold text-amber-600 block mb-1">ডিস ১ (ছাড়)</label>
+                      <input type="number" value={personalData.customPricing?.d1Amount} onChange={e => setPersonalData({...personalData, customPricing: { ...personalData.customPricing!, d1Amount: safeNum(e.target.value) }})} className="w-full bg-transparent text-sm font-black text-amber-700 outline-none border-b border-amber-200" />
+                  </div>
+                  <div className="bg-orange-50 p-2 rounded-xl border border-orange-100">
+                      <label className="text-[8px] font-bold text-orange-600 block mb-1">ডিস ২ (ছাড়)</label>
+                      <input type="number" value={personalData.customPricing?.d2Amount} onChange={e => setPersonalData({...personalData, customPricing: { ...personalData.customPricing!, d2Amount: safeNum(e.target.value) }})} className="w-full bg-transparent text-sm font-black text-orange-700 outline-none border-b border-orange-200" />
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* GUEST LIST */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
+            <h3 className="font-bold text-slate-700 text-[10px] uppercase tracking-widest flex items-center gap-1.5">
+                <Users size={14} className="text-slate-400"/> গেস্ট ({personalData.guests?.length || 0})
+            </h3>
+            <button onClick={() => setIsAddingGuest(!isAddingGuest)} className="text-[9px] font-bold bg-white text-indigo-600 px-3 py-1.5 rounded-lg border border-indigo-100 shadow-sm flex items-center gap-1 hover:bg-indigo-50">
+                <PlusCircle size={12}/> নতুন
             </button>
         </div>
         
         {isAddingGuest && (
-            <div className="p-4 sm:p-6 bg-slate-50/50 border-b border-slate-100 animate-fade-in">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                    <div className="sm:col-span-2">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 block mb-1">নাম</label>
-                        <input className="w-full border border-slate-200 bg-white p-3.5 rounded-xl text-sm outline-none font-bold focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all" value={newGuest.name} onChange={e => setNewGuest({...newGuest, name: e.target.value})} placeholder="নাম"/>
-                    </div>
-                    <div className="col-span-1">
-                         <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 block mb-1">মোবাইল</label>
-                         <input className="w-full border border-slate-200 bg-white p-3.5 rounded-xl text-sm outline-none font-bold focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all" value={newGuest.phone} onChange={e => setNewGuest({...newGuest, phone: e.target.value})} placeholder="ফোন"/>
-                    </div>
-                    <div className="col-span-1">
-                         <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 block mb-1">প্যাকেজ টাইপ</label>
-                         <div className="relative">
-                            <select 
-                                value={newGuest.seatType}
-                                onChange={handlePackageChange}
-                                className="w-full border border-slate-200 bg-white p-3.5 rounded-xl text-xs outline-none font-bold focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none"
-                            >
-                                <option value="regular">রেগুলার (৳{activeTour.fees?.regular})</option>
-                                <option value="disc1">ডিসকাউন্ট ১ (৳{activeTour.fees?.disc1})</option>
-                                <option value="disc2">ডিসকাউন্ট ২ (৳{activeTour.fees?.disc2})</option>
-                            </select>
-                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14}/>
-                         </div>
-                    </div>
-                    <div>
-                         <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 block mb-1">সিট সংখ্যা</label>
-                         <input type="number" className="w-full border border-slate-200 bg-white p-3.5 rounded-xl text-sm outline-none font-bold text-center focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all" value={newGuest.seatCount} onChange={e => setNewGuest({...newGuest, seatCount: e.target.value})} placeholder="1"/>
-                    </div>
-                    <div>
-                         <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 block mb-1">জনপ্রতি ফি</label>
-                         <input type="number" className="w-full border border-emerald-200 bg-emerald-50/50 p-3.5 rounded-xl text-sm outline-none font-bold text-center text-emerald-700 focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" value={newGuest.unitPrice} onChange={e => setNewGuest({...newGuest, unitPrice: e.target.value})} placeholder="0"/>
-                    </div>
-                    <div className="sm:col-span-2 bg-white p-2 rounded-xl border border-slate-200/50">
-                         <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 block mb-1">সিট নম্বর (A1, B2...)</label>
-                         <input className="w-full border border-slate-200 bg-slate-50 p-3.5 rounded-xl text-sm outline-none font-bold focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all" value={newGuest.seatNumbers} onChange={e => setNewGuest({...newGuest, seatNumbers: e.target.value})} placeholder="সিট নম্বর লিখুন"/>
+            <div className="p-4 bg-slate-50 border-b border-slate-100 animate-fade-in">
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                    <input className="w-full p-2.5 rounded-xl border border-slate-200 text-xs font-bold outline-none" value={newGuest.name} onChange={e => setNewGuest({...newGuest, name: e.target.value})} placeholder="নাম"/>
+                    <input className="w-full p-2.5 rounded-xl border border-slate-200 text-xs font-bold outline-none" value={newGuest.phone} onChange={e => setNewGuest({...newGuest, phone: e.target.value})} placeholder="মোবাইল"/>
+                    <input className="col-span-2 w-full p-2.5 rounded-xl border border-slate-200 text-xs font-bold outline-none" value={newGuest.seatNumbers} onChange={e => setNewGuest({...newGuest, seatNumbers: e.target.value})} placeholder="সিট নম্বর (A1, B2)"/>
+                </div>
+                
+                <div className="bg-white p-3 rounded-xl border border-slate-200 mb-3">
+                    <label className="text-[9px] font-bold text-slate-400 uppercase block mb-2">প্যাকেজ ও সিট ব্রেকডাউন</label>
+                    <div className="grid grid-cols-3 gap-2">
+                        <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 text-center">
+                            <span className="text-[8px] font-bold text-slate-500 block">রেগুলার</span>
+                            <input type="number" placeholder="0" className="w-full bg-transparent text-center font-bold text-sm outline-none" value={newGuest.regCount} onChange={e => setNewGuest({...newGuest, regCount: e.target.value})}/>
+                        </div>
+                        <div className="bg-amber-50 p-2 rounded-lg border border-amber-100 text-center">
+                            <span className="text-[8px] font-bold text-amber-600 block">ডিস ১</span>
+                            <input type="number" placeholder="0" className="w-full bg-transparent text-center font-bold text-sm outline-none text-amber-700" value={newGuest.d1Count} onChange={e => setNewGuest({...newGuest, d1Count: e.target.value})}/>
+                        </div>
+                        <div className="bg-orange-50 p-2 rounded-lg border border-orange-100 text-center">
+                            <span className="text-[8px] font-bold text-orange-600 block">ডিস ২</span>
+                            <input type="number" placeholder="0" className="w-full bg-transparent text-center font-bold text-sm outline-none text-orange-700" value={newGuest.d2Count} onChange={e => setNewGuest({...newGuest, d2Count: e.target.value})}/>
+                        </div>
                     </div>
                 </div>
-                <div className="flex justify-end gap-3">
-                    <button onClick={() => setIsAddingGuest(false)} className="px-5 py-3 rounded-xl text-slate-500 text-xs font-bold hover:bg-slate-200 transition-colors">বাতিল</button>
-                    <button onClick={handleAddGuest} className="bg-indigo-600 text-white px-8 py-3 rounded-xl text-xs font-bold shadow-xl shadow-indigo-200 hover:bg-indigo-700 hover:scale-105 transition-all">যোগ করুন</button>
+
+                <div className="flex justify-between items-center mb-4 px-1">
+                    <div className="text-[10px] font-bold text-slate-500">
+                        মোট পেয়েবল: <span className="text-emerald-600 text-xs">৳{calculateNewGuestPayable()}</span>
+                    </div>
+                    <div className="w-28">
+                         <input 
+                            type="number" 
+                            placeholder="ম্যানুয়াল এমাউন্ট" 
+                            className="w-full p-1.5 rounded-lg border border-slate-200 text-[10px] font-bold text-right outline-none focus:border-emerald-400"
+                            value={newGuest.manualCollection}
+                            onChange={e => setNewGuest({...newGuest, manualCollection: e.target.value})}
+                         />
+                    </div>
+                </div>
+
+                <div className="flex gap-2">
+                    <button onClick={() => setIsAddingGuest(false)} className="flex-1 py-2 rounded-xl text-[10px] font-bold bg-white border border-slate-200 text-slate-500">বাতিল</button>
+                    <button onClick={handleAddGuest} className="flex-1 py-2 rounded-xl text-[10px] font-bold bg-indigo-600 text-white shadow-lg shadow-indigo-200">যোগ করুন</button>
                 </div>
             </div>
         )}
         
         {(!personalData.guests || personalData.guests.length === 0) ? (
-             <div className="p-12 text-center text-slate-400 text-xs font-bold italic border-dashed border-2 border-slate-100 m-8 rounded-3xl bg-slate-50/50">কোনো গেস্ট নেই</div>
+             <div className="p-8 text-center text-slate-300 text-[10px] font-bold italic">কোনো গেস্ট নেই</div>
         ) : (
-            <div className="space-y-3 p-4 sm:p-6 bg-slate-50/30">
+            <div className="divide-y divide-slate-50">
                 {personalData.guests.map((g, i) => (
-                    <div key={g.id} className="p-4 sm:p-5 bg-white rounded-3xl shadow-sm border border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:shadow-md transition-shadow">
-                        <div>
-                            <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 text-xs font-bold shrink-0">
-                                    {i + 1}
+                    <div key={g.id} className="p-3 hover:bg-slate-50 transition-colors flex justify-between items-center gap-2 group">
+                        <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className="text-[10px] font-bold text-slate-400 w-4">{i+1}.</span>
+                                <p className="font-bold text-slate-700 text-xs truncate">{g.name}</p>
+                            </div>
+                            <div className="flex items-center gap-2 ml-6">
+                                <span className="text-[9px] text-slate-400 font-bold bg-slate-50 px-1.5 rounded border border-slate-100 flex items-center gap-1"><Phone size={8}/> {g.phone}</span>
+                                {g.seatNumbers && <span className="text-[9px] text-violet-500 font-bold bg-violet-50 px-1.5 rounded border border-violet-100">{g.seatNumbers}</span>}
+                            </div>
+                            {g.paxBreakdown && (
+                                <div className="flex gap-1 ml-6 mt-1.5">
+                                    {g.paxBreakdown.regular > 0 && <span className="text-[8px] font-bold bg-slate-100 text-slate-600 px-1 rounded">Reg:{g.paxBreakdown.regular}</span>}
+                                    {g.paxBreakdown.disc1 > 0 && <span className="text-[8px] font-bold bg-amber-50 text-amber-600 px-1 rounded">D1:{g.paxBreakdown.disc1}</span>}
+                                    {g.paxBreakdown.disc2 > 0 && <span className="text-[8px] font-bold bg-orange-50 text-orange-600 px-1 rounded">D2:{g.paxBreakdown.disc2}</span>}
                                 </div>
-                                <p className="font-bold text-slate-700 text-sm">{g.name}</p>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-3 mt-2 ml-11">
-                                <span className="text-[10px] text-slate-400 font-bold flex items-center gap-1 whitespace-nowrap"><Phone size={10}/> {g.phone || 'N/A'}</span>
-                                <span className="text-[10px] text-slate-500 font-bold bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200 whitespace-nowrap">{g.seatCount} সিট</span>
-                                {g.seatNumbers && (
-                                    <span className="text-[10px] text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-100 font-bold flex items-center gap-1 whitespace-nowrap">
-                                        <Armchair size={10}/> {g.seatNumbers}
-                                    </span>
-                                )}
-                                <span className={`text-[10px] px-2 py-0.5 rounded-lg border font-bold flex items-center gap-1 whitespace-nowrap ${
-                                    g.seatType === 'disc1' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                                    g.seatType === 'disc2' ? 'bg-orange-50 text-orange-600 border-orange-100' :
-                                    'bg-violet-50 text-violet-600 border-violet-100'
-                                }`}>
-                                    <Tag size={10} /> 
-                                    {g.seatType === 'disc1' ? 'ডিসকাউন্ট ১' : g.seatType === 'disc2' ? 'ডিসকাউন্ট ২' : 'রেগুলার'}
-                                </span>
-                            </div>
+                            )}
                         </div>
-                        <div className="flex items-center gap-5 w-full sm:w-auto justify-between sm:justify-end ml-11 sm:ml-0 border-t sm:border-t-0 border-slate-50 pt-3 sm:pt-0 mt-2 sm:mt-0">
-                             <div className="text-right">
-                                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">টোটাল</p>
-                                <p className="font-mono font-black text-emerald-600 text-sm">৳{g.collection}</p>
-                             </div>
-                             <button onClick={() => removeGuest(g.id)} className="p-3 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"><Trash2 size={18}/></button>
+                        <div className="text-right">
+                             <p className="font-black text-emerald-600 text-xs">৳{g.collection}</p>
+                             <button onClick={() => removeGuest(g.id)} className="mt-1 p-1.5 text-slate-200 hover:text-rose-500 hover:bg-rose-50 rounded transition-all"><Trash2 size={12}/></button>
                         </div>
                     </div>
                 ))}
@@ -384,99 +349,48 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
       </div>
 
       {/* Expenses */}
-      <div className="bg-white p-6 sm:p-8 rounded-[2.5rem] shadow-lg shadow-slate-200/50 border border-slate-100">
-        <div className="flex justify-between items-center mb-6">
-            <h3 className="text-xs font-bold text-orange-600 uppercase tracking-widest flex items-center gap-3">
-                <div className="p-2 bg-orange-100 rounded-xl"><Receipt size={16} /></div> ব্যক্তিগত খরচ
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+        <div className="flex justify-between items-center mb-3">
+            <h3 className="text-[10px] font-bold text-orange-600 uppercase tracking-widest flex items-center gap-2">
+                <Receipt size={14} /> ব্যক্তিগত খরচ
             </h3>
-            <button 
-                onClick={addExpense} 
-                className="text-slate-600 text-xs flex items-center font-bold bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-xl hover:bg-white hover:shadow-md transition-all shadow-sm"
-            >
-                <PlusCircle size={14} className="mr-1.5"/> যোগ
+            <button onClick={addExpense} className="text-[9px] font-bold bg-slate-50 text-slate-600 px-2 py-1 rounded border border-slate-200 hover:bg-white flex items-center gap-1">
+                <PlusCircle size={10}/> যোগ
             </button>
         </div>
         
-        <div className="space-y-4">
-            {(!personalData.customExpenses || personalData.customExpenses.length === 0) && (
-                <div className="text-center py-12 bg-slate-50/50 rounded-3xl border-2 border-dashed border-slate-100">
-                    <Receipt size={32} className="text-slate-300 mx-auto mb-3"/>
-                    <p className="text-xs text-slate-400 font-bold">কোন অতিরিক্ত খরচ যোগ করা হয়নি</p>
-                </div>
-            )}
-            
-            {personalData.customExpenses && personalData.customExpenses.map(exp => (
-                <div key={exp.id} className="flex flex-col sm:flex-row gap-2 sm:gap-4 items-stretch sm:items-center animate-fade-in group bg-white p-2 rounded-2xl hover:shadow-sm border border-transparent hover:border-slate-100 transition-all">
-                    <input type="text" value={exp.name} onChange={e => updateExpense(exp.id, 'name', e.target.value)} 
-                        className="flex-1 border border-slate-200 bg-slate-50/50 p-3 sm:p-4 rounded-xl text-sm focus:bg-white focus:ring-4 focus:ring-violet-500/10 outline-none transition-all font-bold placeholder-slate-400" placeholder="খরচের বিবরণ..." />
-                    <div className="flex gap-2">
-                        <div className="relative flex-1 sm:w-36">
-                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">৳</span>
-                            <input type="number" value={exp.amount} onChange={e => updateExpense(exp.id, 'amount', Number(e.target.value))} 
-                                className="w-full border border-slate-200 bg-slate-50/50 pl-8 pr-4 py-3 sm:py-4 rounded-xl text-sm focus:bg-white focus:ring-4 focus:ring-violet-500/10 outline-none transition-all font-bold text-slate-700" placeholder="0" />
-                        </div>
-                        <button onClick={() => setPersonalData({...personalData, customExpenses: personalData.customExpenses.filter(e => e.id !== exp.id)})} 
-                            className="p-3 sm:p-4 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all border border-transparent hover:border-rose-100">
-                            <Trash2 size={20} />
-                        </button>
-                    </div>
+        <div className="space-y-2">
+            {personalData.customExpenses?.map(exp => (
+                <div key={exp.id} className="flex items-center gap-2">
+                    <input className="flex-1 bg-slate-50 p-2 rounded-lg text-[10px] font-bold outline-none border border-slate-100 focus:bg-white focus:border-slate-300" 
+                        value={exp.name} onChange={e => updateExpense(exp.id, 'name', e.target.value)} placeholder="বিবরণ..." />
+                    <input className="w-20 bg-slate-50 p-2 rounded-lg text-[10px] font-bold text-center outline-none border border-slate-100 focus:bg-white focus:border-slate-300" 
+                        type="number" value={exp.amount} onChange={e => updateExpense(exp.id, 'amount', Number(e.target.value))} placeholder="0" />
+                    <button onClick={() => setPersonalData({...personalData, customExpenses: personalData.customExpenses.filter(e => e.id !== exp.id)})} 
+                        className="p-2 text-slate-300 hover:text-rose-500"><Trash2 size={12} /></button>
                 </div>
             ))}
-            
-            <div className="border-t border-dashed border-slate-200 pt-6 mt-6">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-violet-50/50 p-5 rounded-3xl border border-violet-100 hover:bg-violet-50 transition-colors gap-3">
-                    <label className="text-xs font-bold text-violet-700 uppercase tracking-wide flex items-center gap-3">
-                        <div className="p-2 bg-white rounded-lg shadow-sm"><Wallet size={16}/></div> বুকিং মানি গ্রহণ (Host)
-                    </label>
-                    <div className="relative w-full sm:w-48">
-                        <span className="absolute left-5 top-1/2 -translate-y-1/2 text-violet-400 text-sm font-bold">৳</span>
-                        <input type="number" value={personalData.bookingFee} onChange={e => setPersonalData({...personalData, bookingFee: Number(e.target.value)})} 
-                            className="w-full border-0 bg-white pl-10 pr-5 py-3 rounded-2xl text-lg text-right font-black text-violet-700 focus:ring-4 focus:ring-violet-200 outline-none transition-all shadow-sm" />
-                    </div>
-                </div>
+            <div className="pt-3 mt-2 border-t border-slate-50 flex justify-between items-center">
+                 <label className="text-[9px] font-bold text-violet-600 uppercase flex items-center gap-1.5"><Wallet size={12}/> বুকিং মানি গ্রহণ</label>
+                 <input className="w-24 bg-violet-50 p-2 rounded-lg text-xs font-black text-right text-violet-700 outline-none border-none" 
+                    type="number" value={personalData.bookingFee} onChange={e => setPersonalData({...personalData, bookingFee: Number(e.target.value)})} placeholder="0"/>
             </div>
         </div>
       </div>
 
       {isAdmin && (
-        <div className="relative rounded-[2.5rem] shadow-2xl shadow-slate-300/50 overflow-hidden mt-8 group transition-transform hover:scale-[1.01]">
-            <div className="absolute inset-0 bg-slate-900"></div>
-            <div className={`absolute inset-0 opacity-20 bg-gradient-to-br ${settlement.netResult >= 0 ? 'from-emerald-500 to-teal-500' : 'from-rose-500 to-orange-500'} transition-colors duration-500`}></div>
-            
-            <div className="relative p-8 sm:p-10 text-white">
-                <div className="flex justify-between items-center mb-8 sm:mb-10 border-b border-white/10 pb-6">
-                    <div>
-                        <p className="text-[10px] text-white/60 uppercase tracking-[0.2em] mb-2 font-bold">ব্যক্তিগত হিসাব</p>
-                        <h3 className="text-xl sm:text-2xl font-black tracking-tight">প্রফিট / লস স্টেটমেন্ট</h3>
-                    </div>
-                    <div className="bg-white/10 p-3 sm:p-4 rounded-2xl backdrop-blur-md border border-white/10 shadow-lg">
-                        <Wallet size={32} className="text-white" />
-                    </div>
+        <div className={`rounded-2xl p-5 text-white shadow-lg ${settlement.netResult >= 0 ? 'bg-gradient-to-br from-emerald-500 to-teal-600' : 'bg-gradient-to-br from-rose-500 to-orange-600'}`}>
+            <div className="flex justify-between items-start mb-4">
+                <div>
+                    <p className="text-[8px] font-bold uppercase tracking-widest opacity-80 mb-1">নেট প্রফিট / লস</p>
+                    <h3 className="text-3xl font-black tracking-tight">{settlement.netResult}৳</h3>
                 </div>
-
-                <div className="space-y-4 sm:space-y-5 text-sm mb-8">
-                    <div className="flex justify-between text-white/70">
-                        <span className="font-bold">মোট আয় (প্যাকেজ + বুকিং)</span>
-                        <span className="font-bold text-white font-mono text-base sm:text-lg">৳ {settlement.totalPersonalIncome.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between text-white/70">
-                        <span className="font-bold">বাদ: সিট খরচ (Buy Rate)</span>
-                        <span className="font-bold text-orange-300 font-mono text-base sm:text-lg">- ৳ {settlement.totalPersonalCost.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between text-white/70">
-                        <span className="font-bold">বাদ: ব্যক্তিগত খরচ</span>
-                        <span className="font-bold text-rose-300 font-mono text-base sm:text-lg">- ৳ {settlement.personalExpenses.toLocaleString()}</span>
-                    </div>
-                </div>
-                
-                <div className="bg-white/10 p-5 sm:p-6 rounded-3xl border border-white/10 flex flex-col sm:flex-row justify-between items-start sm:items-center backdrop-blur-md shadow-inner gap-2">
-                    <span className="font-bold text-white text-xs uppercase tracking-widest flex items-center gap-2 opacity-80">
-                        নেট লাভ / (লস) <ArrowRight size={16} className="opacity-50 hidden sm:block"/>
-                    </span>
-                    <span className={`text-3xl sm:text-4xl font-black tracking-tighter ${settlement.netResult >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
-                        {settlement.netResult >= 0 ? '+' : ''}{settlement.netResult.toLocaleString()} <span className="text-xl opacity-60 font-bold">৳</span>
-                    </span>
-                </div>
+                <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm"><Calculator size={16}/></div>
+            </div>
+            <div className="space-y-1 text-[10px] font-medium opacity-90 border-t border-white/20 pt-2">
+                <div className="flex justify-between"><span>মোট আয়</span> <span>৳ {settlement.totalPersonalIncome}</span></div>
+                <div className="flex justify-between"><span>সিট খরচ (Buy Rate)</span> <span>- ৳ {settlement.totalPersonalCost}</span></div>
+                <div className="flex justify-between"><span>অন্যান্য খরচ</span> <span>- ৳ {settlement.personalExpenses}</span></div>
             </div>
         </div>
       )}

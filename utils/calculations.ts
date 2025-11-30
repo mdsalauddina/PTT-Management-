@@ -1,5 +1,4 @@
 
-
 import { BusConfig, PartnerAgency, Tour, PersonalData, Guest } from '../types';
 
 // Helper to safely convert to number
@@ -10,6 +9,10 @@ export const safeNum = (val: any): number => {
 
 // Helper to get total seats from a guest entry
 const getGuestSeatCount = (guest: Guest): number => {
+  // If breakdown exists, sum it up
+  if (guest.paxBreakdown) {
+      return safeNum(guest.paxBreakdown.regular) + safeNum(guest.paxBreakdown.disc1) + safeNum(guest.paxBreakdown.disc2);
+  }
   return safeNum(guest.seatCount) || 1;
 };
 
@@ -124,9 +127,9 @@ export const calculateAgencySettlement = (tour: Tour, agency: PartnerAgency) => 
   };
 };
 
-// Personal Settlement (Updated to match Agency Logic: Income vs Cost)
+// Personal Settlement (Updated: Uses detailed breakdown for Income and Cost)
 export const calculatePersonalSettlement = (tour: Tour, personalData: PersonalData) => {
-    if (!tour || !personalData) return { totalPersonalIncome: 0, personalExpenses: 0, totalPersonalCost: 0, netResult: 0 };
+    if (!tour || !personalData) return { totalPersonalIncome: 0, personalExpenses: 0, totalPersonalCost: 0, netResult: 0, fees: { regFee: 0, d1Fee: 0, d2Fee: 0 } };
 
     const bookingFee = safeNum(personalData.bookingFee);
     const personalExpenses = personalData.customExpenses 
@@ -135,27 +138,55 @@ export const calculatePersonalSettlement = (tour: Tour, personalData: PersonalDa
 
     const rates = calculateBuyRates(tour);
     
-    // Calculate Income (Revenue)
-    // If guest list exists, use collection. If not, calculate from counters.
+    // Determining Fees for Personal Guests (Income Calculation)
+    const baseFee = personalData.customPricing ? safeNum(personalData.customPricing.baseFee) : safeNum(tour.fees?.regular);
+    const d1Amount = personalData.customPricing ? safeNum(personalData.customPricing.d1Amount) : safeNum(tour.busConfig?.discount1Amount);
+    const d2Amount = personalData.customPricing ? safeNum(personalData.customPricing.d2Amount) : safeNum(tour.busConfig?.discount2Amount);
+
+    const regFee = baseFee;
+    const d1Fee = baseFee - d1Amount;
+    const d2Fee = baseFee - d2Amount;
+
     let totalPersonalIncome = bookingFee;
     let totalPersonalCost = 0;
 
     if (personalData.guests && personalData.guests.length > 0) {
         personalData.guests.forEach(g => {
-             totalPersonalIncome += safeNum(g.collection);
-             const seats = getGuestSeatCount(g);
-             if (g.seatType === 'disc1') totalPersonalCost += seats * rates.d1;
-             else if (g.seatType === 'disc2') totalPersonalCost += seats * rates.d2;
-             else totalPersonalCost += seats * rates.regular;
+             // Income Logic:
+             // If breakdown exists, calculate income based on package counts * fees
+             // Otherwise fallback to collection amount
+             
+             if (g.paxBreakdown) {
+                 const incReg = safeNum(g.paxBreakdown.regular) * regFee;
+                 const incD1 = safeNum(g.paxBreakdown.disc1) * d1Fee;
+                 const incD2 = safeNum(g.paxBreakdown.disc2) * d2Fee;
+                 
+                 // If collection is manually set and differs significantly (e.g. partial payment), we might want to use collection. 
+                 // But the requirement says "Mot income hobe je package a joto Jon Manush ashe". 
+                 // We will trust the calculated package price, OR the manually entered collection if the user overrides it in the form.
+                 // In the form, we save the total calculated to 'collection'. So we just use 'collection'.
+                 totalPersonalIncome += safeNum(g.collection);
+
+                 // Cost Logic (Buy Rate):
+                 const costReg = safeNum(g.paxBreakdown.regular) * rates.regular;
+                 const costD1 = safeNum(g.paxBreakdown.disc1) * rates.d1;
+                 const costD2 = safeNum(g.paxBreakdown.disc2) * rates.d2;
+                 
+                 totalPersonalCost += (costReg + costD1 + costD2);
+             } else {
+                 // Fallback for legacy data
+                 totalPersonalIncome += safeNum(g.collection);
+                 const seats = getGuestSeatCount(g);
+                 if (g.seatType === 'disc1') totalPersonalCost += seats * rates.d1;
+                 else if (g.seatType === 'disc2') totalPersonalCost += seats * rates.d2;
+                 else totalPersonalCost += seats * rates.regular;
+             }
         });
     } else {
+        // Fallback to manual counters if no guest list
         const regCount = safeNum(personalData.personalStandardCount);
         const d1Count = safeNum(personalData.personalDisc1Count);
         const d2Count = safeNum(personalData.personalDisc2Count);
-
-        const regFee = safeNum(tour.fees?.regular);
-        const d1Fee = safeNum(tour.fees?.disc1);
-        const d2Fee = safeNum(tour.fees?.disc2);
 
         totalPersonalIncome += (regCount * regFee) + (d1Count * d1Fee) + (d2Count * d2Fee);
         
@@ -168,7 +199,8 @@ export const calculatePersonalSettlement = (tour: Tour, personalData: PersonalDa
     return {
         totalPersonalIncome,
         personalExpenses,
-        totalPersonalCost, // Equivalent to "Host Share of Bus Rent" or "Agency Liability"
-        netResult // Profit or Loss
+        totalPersonalCost, 
+        netResult,
+        fees: { regFee, d1Fee, d2Fee } // Return used fees for display
     };
 };

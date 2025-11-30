@@ -1,9 +1,10 @@
 
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Tour, UserProfile, Guest, PartnerAgency } from '../types';
 import { db } from '../services/firebase';
 import { doc, updateDoc, Timestamp } from 'firebase/firestore';
-import { ChevronDown, LogOut, Users, Plus, Phone, Info, Star, Calendar, History, Wallet, LayoutGrid, Sparkles, Briefcase, Armchair, Tag, Clock, MapPin, X, CheckCircle } from 'lucide-react';
+import { ChevronDown, LogOut, Users, Plus, Phone, Info, Star, Calendar, History, Wallet, LayoutGrid, Sparkles, Briefcase, Armchair, Tag, Clock, MapPin, X, CheckCircle, Calculator } from 'lucide-react';
 import { calculateAgencySettlement, calculateBusFare, calculateTotalOtherFixedCosts, safeNum } from '../utils/calculations';
 
 interface AgencyDashboardProps {
@@ -116,12 +117,15 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
 
       // Bus Fares
       const busFares = calculateBusFare(tour.busConfig);
+      
+      const totalVariablePerHead = perHeadHost + perHeadHotel + perHeadFood + perHeadOthers;
 
       return { 
           totalSeats,
           totals: { host: totalHostFee, hotel: totalHotel, food: totalFood, others: totalOthers },
           perHead: { host: perHeadHost, hotel: perHeadHotel, food: perHeadFood, others: perHeadOthers },
-          busFares
+          busFares,
+          totalVariablePerHead
       };
   };
   
@@ -370,6 +374,15 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
                                         <p className="font-bold text-slate-700">৳{breakdown.perHead.others}</p>
                                         <p className="text-[8px] text-slate-400 mt-0.5">(৳{breakdown.totals.others} ÷ {breakdown.totalSeats})</p>
                                     </div>
+                                </div>
+                                
+                                {/* Total Per Head Without Bus */}
+                                <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center bg-indigo-50/50 p-2 rounded-lg">
+                                    <div className="flex items-center gap-1.5 text-indigo-700">
+                                        <Calculator size={14}/>
+                                        <span className="text-[10px] font-bold uppercase tracking-wide">মোট জনপ্রতি খরচ (বাস ভাড়া বাদে)</span>
+                                    </div>
+                                    <span className="text-sm font-black text-indigo-700">৳{breakdown.totalVariablePerHead}</span>
                                 </div>
                             </div>
                         </div>

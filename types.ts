@@ -101,6 +101,14 @@ export interface PersonalData {
   bookingFee: number;
   customExpenses: { id: string; name: string; amount: number }[];
   guests?: Guest[]; // Added guests list to personal data
+  
+  // Added for custom pricing override in Personal Tab
+  customPricing?: {
+    baseFee: number;
+    d1Amount: number;
+    d2Amount: number;
+  };
+  
   updatedAt: any;
 }
 
