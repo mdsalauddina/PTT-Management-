@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, PersonalData } from '../types';
 import { db } from '../services/firebase';
@@ -164,6 +162,7 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
 
   // Use updated calculation shared utility for Cost Per Seat
   const costPerSeat = calculateBuyRates(activeTour);
+  const busFares = calculateBusFare(activeTour.busConfig);
 
   const seatData = [
     { name: 'বুকড', value: totalBooked, color: '#6366f1' },
@@ -282,7 +281,7 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
                         <tr className="border-b border-slate-100">
                             <th className="p-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider">খাত</th>
                             <th className="p-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-right">মোট</th>
-                            <th className="p-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-right bg-slate-50/50">জনপ্রতি</th>
+                            <th className="p-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-right bg-slate-50/50">জনপ্রতি ({totalBooked} জন)</th>
                         </tr>
                     </thead>
                     <tbody className="text-xs font-bold text-slate-600">
@@ -293,7 +292,7 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
                                 বাস ভাড়া
                             </td>
                             <td className="p-3 text-right font-mono text-slate-700">৳{totalBusRent.toLocaleString()}</td>
-                            <td className="p-3 text-right font-mono text-slate-500 bg-slate-50/30">৳{calcPerHeadBus(totalBusRent)} <span className="text-[8px] opacity-50">(সীট)</span></td>
+                            <td className="p-3 text-right font-mono text-slate-500 bg-slate-50/30">৳{calcPerHeadBus(totalBusRent)} <span className="text-[8px] opacity-50">/ {totalSeats}</span></td>
                         </tr>
 
                         {/* Variable Costs - Divided by Total Guests */}
@@ -311,7 +310,7 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
                                     {item.label}
                                 </td>
                                 <td className="p-3 text-right font-mono text-slate-700">৳{item.total.toLocaleString()}</td>
-                                <td className="p-3 text-right font-mono text-slate-500 bg-slate-50/30">৳{calcPerHeadVariable(item.total)} <span className="text-[8px] opacity-50">(গেস্ট)</span></td>
+                                <td className="p-3 text-right font-mono text-slate-500 bg-slate-50/30">৳{calcPerHeadVariable(item.total)} <span className="text-[8px] opacity-50">/ {totalBooked}</span></td>
                             </tr>
                         ))}
                         <tr className="bg-slate-50/80">
@@ -361,14 +360,17 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
               <div className="bg-violet-50 p-4 rounded-xl border border-violet-100 text-center">
                   <p className="text-[9px] font-bold text-violet-400 uppercase mb-1">রেগুলার সিট</p>
                   <p className="text-xl font-black text-violet-700">৳{costPerSeat.regular}</p>
+                  <p className="text-[10px] font-bold text-violet-400/70 mt-1">বাস ভাড়া: ৳{busFares.regularFare}</p>
               </div>
               <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 text-center">
                   <p className="text-[9px] font-bold text-amber-500 uppercase mb-1">ডিসকাউন্ট ১</p>
                   <p className="text-xl font-black text-amber-600">৳{costPerSeat.d1}</p>
+                  <p className="text-[10px] font-bold text-amber-600/70 mt-1">বাস ভাড়া: ৳{busFares.discount1Fare}</p>
               </div>
               <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 text-center">
                   <p className="text-[9px] font-bold text-orange-500 uppercase mb-1">ডিসকাউন্ট ২</p>
                   <p className="text-xl font-black text-orange-600">৳{costPerSeat.d2}</p>
+                  <p className="text-[10px] font-bold text-orange-600/70 mt-1">বাস ভাড়া: ৳{busFares.discount2Fare}</p>
               </div>
           </div>
           <p className="text-[9px] text-slate-400 mt-3 text-center leading-relaxed">
