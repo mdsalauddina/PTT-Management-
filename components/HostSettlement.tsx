@@ -1,13 +1,15 @@
+
+
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, PersonalData } from '../types';
 import { db } from '../services/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { Wallet, ChevronDown, TrendingUp, TrendingDown, Receipt, DollarSign, Building } from 'lucide-react';
 import { calculateTotalDailyExpenses, calculateTotalOtherFixedCosts, safeNum } from '../utils/calculations';
 
 const HostSettlement: React.FC<CommonTabProps> = ({ user, tours }) => {
   const [selectedTourId, setSelectedTourId] = useState<string>('');
-  const [personalData, setPersonalData] = useState<PersonalData | null>(null);
+  const [personalCollection, setPersonalCollection] = useState<number>(0);
 
   useEffect(() => {
     if (tours.length > 0 && !selectedTourId) {
@@ -19,21 +21,41 @@ const HostSettlement: React.FC<CommonTabProps> = ({ user, tours }) => {
 
   useEffect(() => {
     if (!activeTour) return;
-    const fetchPersonalData = async () => {
+    const fetchAggregatedPersonalData = async () => {
       try {
-        const docRef = doc(db, 'personal', `${activeTour.id}_${user.uid}`);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setPersonalData(docSnap.data() as PersonalData);
-        } else {
-          setPersonalData(null);
-        }
+        // Query all personal data documents for this tour (created by Admin or Host)
+        const q = query(collection(db, 'personal'), where('tourId', '==', activeTour.id));
+        const snapshot = await getDocs(q);
+        
+        let totalCollection = 0;
+        
+        snapshot.forEach((doc) => {
+            const data = doc.data() as PersonalData;
+            
+            // Add Booking Fee
+            totalCollection += safeNum(data.bookingFee);
+            
+            // Add Guest Collections
+            if (data.guests && data.guests.length > 0) {
+                totalCollection += data.guests.reduce((sum, g) => sum + safeNum(g.collection), 0);
+            } else {
+                // Fallback for older data structure without guest array
+                const reg = safeNum(data.personalStandardCount) * safeNum(activeTour.fees?.regular);
+                const d1 = safeNum(data.personalDisc1Count) * safeNum(activeTour.fees?.disc1);
+                const d2 = safeNum(data.personalDisc2Count) * safeNum(activeTour.fees?.disc2);
+                totalCollection += (reg + d1 + d2);
+            }
+        });
+        
+        setPersonalCollection(totalCollection);
+
       } catch (err) {
-        console.error("Error fetching personal data", err);
+        console.error("Error fetching personal data for settlement", err);
+        setPersonalCollection(0);
       }
     };
-    fetchPersonalData();
-  }, [activeTour, user.uid]);
+    fetchAggregatedPersonalData();
+  }, [activeTour]);
 
   if (!activeTour) return (
       <div className="h-full flex flex-col items-center justify-center p-10 text-center text-slate-400">
@@ -44,21 +66,8 @@ const HostSettlement: React.FC<CommonTabProps> = ({ user, tours }) => {
 
   // --- CALCULATION LOGIC ---
 
-  // 1. Personal Collection
-  let personalCollection = 0;
-  if (personalData) {
-      const bookingFee = safeNum(personalData.bookingFee);
-      let guestCollection = 0;
-      if (personalData.guests && personalData.guests.length > 0) {
-          guestCollection = personalData.guests.reduce((sum, g) => sum + safeNum(g.collection), 0);
-      } else {
-          const reg = safeNum(personalData.personalStandardCount) * safeNum(activeTour.fees?.regular);
-          const d1 = safeNum(personalData.personalDisc1Count) * safeNum(activeTour.fees?.disc1);
-          const d2 = safeNum(personalData.personalDisc2Count) * safeNum(activeTour.fees?.disc2);
-          guestCollection = reg + d1 + d2;
-      }
-      personalCollection = guestCollection + bookingFee;
-  }
+  // 1. Personal Collection (Calculated in useEffect)
+  // Used state variable `personalCollection`
 
   // 2. Agency Collection
   let agencyCollection = 0;

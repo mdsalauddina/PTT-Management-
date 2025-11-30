@@ -4,7 +4,7 @@ import { Tour, UserProfile, Guest, PartnerAgency } from '../types';
 import { db } from '../services/firebase';
 import { doc, updateDoc, Timestamp } from 'firebase/firestore';
 import { ChevronDown, LogOut, Users, Plus, Phone, Info, Star, Calendar, History, Wallet, LayoutGrid, Sparkles, Briefcase, Armchair, Tag, Clock, MapPin, X, CheckCircle } from 'lucide-react';
-import { calculateAgencySettlement } from '../utils/calculations';
+import { calculateAgencySettlement, calculateBusFare, calculateTotalOtherFixedCosts, safeNum } from '../utils/calculations';
 
 interface AgencyDashboardProps {
   user: UserProfile;
@@ -61,7 +61,6 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
   const activeDetailTour = detailViewTours.find(t => t.id === selectedTourId) || null;
   const myAgencyData = activeDetailTour?.partnerAgencies?.find(a => a.email === user.email);
 
-  const safeNum = (val: any) => Number(val) || 0;
   const hasGuests = myAgencyData && myAgencyData.guests && myAgencyData.guests.length > 0;
   
   const settlement = (activeDetailTour && myAgencyData) ? calculateAgencySettlement(activeDetailTour, myAgencyData) : null;
@@ -92,21 +91,38 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
   const calculateBreakdown = (tour: Tour) => {
       if (!tour) return null;
       const totalSeats = safeNum(tour.busConfig?.totalSeats) || 1;
-      const hostFee = safeNum(tour.costs?.hostFee);
-      const hotelCost = safeNum(tour.costs?.hotelCost);
-      const dailyExpensesTotal = tour.costs?.dailyExpenses ? tour.costs.dailyExpenses.reduce((sum, day) => 
-          sum + safeNum(day.breakfast) + safeNum(day.lunch) + safeNum(day.dinner) + safeNum(day.transport) + safeNum(day.other), 0
-      ) : 0;
-
-      // Per Head Fixed & Variable
-      const perHeadBus = Math.ceil(safeNum(tour.busConfig?.totalRent) / totalSeats);
-      const perHeadHotel = Math.ceil(hotelCost / totalSeats);
-      const perHeadMgmt = Math.ceil(hostFee / totalSeats);
-      const perHeadDaily = Math.ceil(dailyExpensesTotal / totalSeats);
       
-      const totalPerHead = perHeadBus + perHeadHotel + perHeadMgmt + perHeadDaily;
+      // 1. Host Fee
+      const totalHostFee = safeNum(tour.costs?.hostFee);
 
-      return { perHeadBus, perHeadHotel, perHeadMgmt, perHeadDaily, totalPerHead };
+      // 2. Hotel
+      const totalHotel = safeNum(tour.costs?.hotelCost);
+
+      // 3. Food (Breakfast + Lunch + Dinner)
+      const totalFood = tour.costs?.dailyExpenses?.reduce((sum, day) => 
+          sum + safeNum(day.breakfast) + safeNum(day.lunch) + safeNum(day.dinner), 0) || 0;
+
+      // 4. Others (Transport + Daily Other + Fixed Other)
+      const totalDailyOther = tour.costs?.dailyExpenses?.reduce((sum, day) => 
+          sum + safeNum(day.transport) + safeNum(day.other), 0) || 0;
+      const totalFixedOther = calculateTotalOtherFixedCosts(tour);
+      const totalOthers = totalDailyOther + totalFixedOther;
+
+      // Per Heads
+      const perHeadHost = Math.ceil(totalHostFee / totalSeats);
+      const perHeadHotel = Math.ceil(totalHotel / totalSeats);
+      const perHeadFood = Math.ceil(totalFood / totalSeats);
+      const perHeadOthers = Math.ceil(totalOthers / totalSeats);
+
+      // Bus Fares
+      const busFares = calculateBusFare(tour.busConfig);
+
+      return { 
+          totalSeats,
+          totals: { host: totalHostFee, hotel: totalHotel, food: totalFood, others: totalOthers },
+          perHead: { host: perHeadHost, hotel: perHeadHotel, food: perHeadFood, others: perHeadOthers },
+          busFares
+      };
   };
   
   const breakdown = activeDetailTour ? calculateBreakdown(activeDetailTour) : null;
@@ -298,6 +314,7 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
                                 <div className="bg-violet-50 p-3 rounded-xl border border-violet-100 text-center relative overflow-hidden group">
                                     <p className="text-[8px] font-bold text-violet-400 uppercase mb-1 tracking-wider">রেগুলার সিট</p>
                                     <p className="text-lg font-black text-violet-700">৳{settlement.rates.regular}</p>
+                                    <p className="text-[9px] font-bold text-slate-400">বাস ভাড়া: ৳{breakdown.busFares.regularFare}</p>
                                     <div className="mt-2 text-[9px] bg-white/60 rounded-lg py-1 font-bold text-violet-600 border border-violet-100">
                                         বুকিং: {agencySeatStats.regular} টি
                                     </div>
@@ -307,6 +324,7 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
                                 <div className="bg-amber-50 p-3 rounded-xl border border-amber-100 text-center relative overflow-hidden group">
                                     <p className="text-[8px] font-bold text-amber-500 uppercase mb-1 tracking-wider">ডিসকাউন্ট ১</p>
                                     <p className="text-lg font-black text-amber-600">৳{settlement.rates.d1}</p>
+                                    <p className="text-[9px] font-bold text-slate-400">বাস ভাড়া: ৳{breakdown.busFares.discount1Fare}</p>
                                     <div className="mt-2 text-[9px] bg-white/60 rounded-lg py-1 font-bold text-amber-600 border border-amber-100">
                                         বুকিং: {agencySeatStats.d1} টি
                                     </div>
@@ -316,6 +334,7 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
                                 <div className="bg-orange-50 p-3 rounded-xl border border-orange-100 text-center relative overflow-hidden group">
                                     <p className="text-[8px] font-bold text-orange-500 uppercase mb-1 tracking-wider">ডিসকাউন্ট ২</p>
                                     <p className="text-lg font-black text-orange-600">৳{settlement.rates.d2}</p>
+                                    <p className="text-[9px] font-bold text-slate-400">বাস ভাড়া: ৳{breakdown.busFares.discount2Fare}</p>
                                     <div className="mt-2 text-[9px] bg-white/60 rounded-lg py-1 font-bold text-orange-600 border border-orange-100">
                                         বুকিং: {agencySeatStats.d2} টি
                                     </div>
@@ -331,21 +350,25 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
                             </div>
                             <div className="p-5">
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                        <p className="text-[9px] text-slate-400 font-bold uppercase mb-1">বাস ভাড়া</p>
-                                        <p className="font-bold text-slate-700">৳{breakdown.perHeadBus}</p>
+                                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-center">
+                                        <p className="text-[9px] text-slate-400 font-bold uppercase mb-1">হোস্ট খরচ</p>
+                                        <p className="font-bold text-slate-700">৳{breakdown.perHead.host}</p>
+                                        <p className="text-[8px] text-slate-400 mt-0.5">(৳{breakdown.totals.host} ÷ {breakdown.totalSeats})</p>
                                     </div>
-                                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-center">
                                         <p className="text-[9px] text-slate-400 font-bold uppercase mb-1">হোটেল</p>
-                                        <p className="font-bold text-slate-700">৳{breakdown.perHeadHotel}</p>
+                                        <p className="font-bold text-slate-700">৳{breakdown.perHead.hotel}</p>
+                                        <p className="text-[8px] text-slate-400 mt-0.5">(৳{breakdown.totals.hotel} ÷ {breakdown.totalSeats})</p>
                                     </div>
-                                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                        <p className="text-[9px] text-slate-400 font-bold uppercase mb-1">খাবার ও অন্যান্য</p>
-                                        <p className="font-bold text-slate-700">৳{breakdown.perHeadDaily}</p>
+                                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-center">
+                                        <p className="text-[9px] text-slate-400 font-bold uppercase mb-1">খাবার</p>
+                                        <p className="font-bold text-slate-700">৳{breakdown.perHead.food}</p>
+                                        <p className="text-[8px] text-slate-400 mt-0.5">(৳{breakdown.totals.food} ÷ {breakdown.totalSeats})</p>
                                     </div>
-                                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                        <p className="text-[9px] text-slate-400 font-bold uppercase mb-1">ম্যানেজমেন্ট</p>
-                                        <p className="font-bold text-slate-700">৳{breakdown.perHeadMgmt}</p>
+                                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-center">
+                                        <p className="text-[9px] text-slate-400 font-bold uppercase mb-1">অন্যান্য</p>
+                                        <p className="font-bold text-slate-700">৳{breakdown.perHead.others}</p>
+                                        <p className="text-[8px] text-slate-400 mt-0.5">(৳{breakdown.totals.others} ÷ {breakdown.totalSeats})</p>
                                     </div>
                                 </div>
                             </div>

@@ -1,15 +1,20 @@
+
+
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, PersonalData } from '../types';
 import { db } from '../services/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from 'recharts';
-import { TrendingUp, Activity, Wallet, Building, Coffee, Car, Utensils, Users, ChevronDown, AlertCircle, Bus, Tags, PlusCircle } from 'lucide-react';
+import { TrendingUp, Activity, Wallet, Building, Coffee, Car, Utensils, Users, ChevronDown, AlertCircle, Bus, Tags, PlusCircle, TrendingDown } from 'lucide-react';
 import { calculateBusFare, calculateTotalDailyExpenses, calculateTotalOtherFixedCosts, safeNum } from '../utils/calculations';
 
 const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
   const [selectedTourId, setSelectedTourId] = useState<string>('');
   const [personalGuestCount, setPersonalGuestCount] = useState<number>(0);
   const [personalCollection, setPersonalCollection] = useState<number>(0);
+
+  // New state for Host Settlement
+  const [hostCollection, setHostCollection] = useState<number>(0);
 
   useEffect(() => {
     if (tours.length > 0 && !selectedTourId) {
@@ -53,7 +58,47 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
             console.error(e);
         }
     };
+
+    const fetchHostSettlementData = async () => {
+      if (!activeTour) return;
+      try {
+        // Calculate Total Collection (All Personal + All Agencies)
+        // Note: In real scenarios, we should differentiate who collected what. 
+        // For this specific request, we assume Host collected all "Personal" and "Agency" revenue.
+        
+        // 1. Fetch All Personal Data for this tour
+        const q = query(collection(db, 'personal'), where('tourId', '==', activeTour.id));
+        const snapshot = await getDocs(q);
+        let totalPersonalCol = 0;
+        snapshot.forEach(doc => {
+             const data = doc.data() as PersonalData;
+             totalPersonalCol += safeNum(data.bookingFee);
+             if (data.guests) {
+                 totalPersonalCol += data.guests.reduce((sum, g) => sum + safeNum(g.collection), 0);
+             } else {
+                 const reg = safeNum(data.personalStandardCount) * safeNum(activeTour.fees?.regular);
+                 const d1 = safeNum(data.personalDisc1Count) * safeNum(activeTour.fees?.disc1);
+                 const d2 = safeNum(data.personalDisc2Count) * safeNum(activeTour.fees?.disc2);
+                 totalPersonalCol += (reg + d1 + d2);
+             }
+        });
+
+        // 2. Fetch All Agency Collection
+        let totalAgencyCol = 0;
+        if (activeTour.partnerAgencies) {
+            totalAgencyCol = activeTour.partnerAgencies.reduce((sum, ag) => {
+                 return sum + (ag.guests ? ag.guests.reduce((gSum, g) => gSum + safeNum(g.collection), 0) : 0);
+            }, 0);
+        }
+
+        setHostCollection(totalPersonalCol + totalAgencyCol);
+      } catch (err) {
+        console.error("Error fetching host settlement", err);
+      }
+    };
+
     fetchPersonalData();
+    fetchHostSettlementData();
   }, [activeTour, user]);
 
   if (!activeTour) return (
@@ -79,8 +124,11 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
 
   const totalBooked = agencyGuests + personalGuestCount;
   
-  // CHANGED: Total seats based on Regular Seats as requested
-  const totalSeats = Number(activeTour.busConfig.regularSeats) || 40;
+  // CHANGED: Total seats based on Regular Seats as requested (Re-verified: User asked for Regular+Discounts)
+  // Wait, previous prompt said "Analysis tab a Bus er total seat hobe regular seat number". 
+  // BUT the latest prompt says "Tour a bus seat hisab hobe (regular seat+discounts seat)".
+  // I will follow the LATEST prompt: Regular + D1 + D2
+  const totalSeats = safeNum(activeTour.busConfig.regularSeats) + safeNum(activeTour.busConfig.discount1Seats) + safeNum(activeTour.busConfig.discount2Seats) || 40;
   
   const occupancyRate = totalSeats > 0 ? Math.min((totalBooked / totalSeats) * 100, 100) : 0;
   const vacantSeats = Math.max(0, totalSeats - totalBooked);
@@ -113,14 +161,18 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
   const totalExpenses = totalBusRent + totalHostFee + totalHotelCost + totalOtherFixed + totalDailyMeals + totalDailyTransport + totalDailyExtra;
   const netProfit = totalIncome - totalExpenses;
 
+  // Host Settlement Calculation
+  // Host Spending = Daily Expenses + Other Fixed (Assumed host manages these)
+  const hostSpending = (totalDailyMeals + totalDailyTransport + totalDailyExtra) + totalOtherFixed;
+  const hostSettlementBalance = hostCollection - hostSpending;
+
   // Per Head Calculations
   const calcPerHead = (amount: number) => Math.ceil(amount / (totalSeats || 1));
 
   // --- COST PER SEAT TYPE CALCULATION ---
   const dailyExpensesTotal = calculateTotalDailyExpenses(activeTour);
-  // Including Other Fixed Costs in variable portion for Buy Rate
   const variableCostPerHead = (totalHostFee + totalHotelCost + totalOtherFixed + dailyExpensesTotal) / totalSeats;
-  const busFares = calculateBusFare(activeTour.busConfig); // Note: busFare calc might need adjustment if it uses totalSeats internally differently
+  const busFares = calculateBusFare(activeTour.busConfig);
 
   const costPerSeat = {
       regular: Math.ceil(busFares.regularFare + variableCostPerHead),
@@ -205,6 +257,29 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
                 <p className="text-lg sm:text-xl font-black text-rose-500 tracking-tight truncate">৳{totalExpenses.toLocaleString()}</p>
             </div>
         </div>
+      </div>
+
+      {/* NEW HOST SETTLEMENT CARD (ADMIN VIEW) */}
+      <div className={`p-5 rounded-2xl border shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4 ${hostSettlementBalance >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-orange-50 border-orange-100'}`}>
+          <div className="flex items-center gap-4">
+              <div className={`p-3 rounded-full ${hostSettlementBalance >= 0 ? 'bg-blue-200/50 text-blue-700' : 'bg-orange-200/50 text-orange-700'}`}>
+                  {hostSettlementBalance >= 0 ? <TrendingUp size={24}/> : <TrendingDown size={24}/>}
+              </div>
+              <div>
+                  <h3 className={`font-black uppercase text-sm tracking-wide ${hostSettlementBalance >= 0 ? 'text-blue-800' : 'text-orange-800'}`}>হোস্ট সেটেলমেন্ট</h3>
+                  <p className="text-[10px] font-bold text-slate-500">
+                      (কালেকশন: ৳{hostCollection.toLocaleString()}) - (খরচ: ৳{hostSpending.toLocaleString()})
+                  </p>
+              </div>
+          </div>
+          <div className="text-right">
+              <p className={`text-3xl font-black ${hostSettlementBalance >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>
+                  {Math.abs(hostSettlementBalance).toLocaleString()} ৳
+              </p>
+              <p className="text-[10px] font-bold uppercase tracking-wider opacity-60">
+                  {hostSettlementBalance >= 0 ? 'অ্যাডমিন পাবে' : 'হোস্ট পাবে'}
+              </p>
+          </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

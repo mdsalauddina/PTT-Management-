@@ -1,9 +1,11 @@
+
+
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, PersonalData, Guest } from '../types';
 import { db } from '../services/firebase';
 import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
-import { calculatePersonalSettlement } from '../utils/calculations';
-import { Save, PlusCircle, Trash2, Receipt, Minus, Plus, UserCircle, ChevronDown, Wallet, ArrowRight, UserPlus, Phone, Armchair, Tag } from 'lucide-react';
+import { calculatePersonalSettlement, safeNum } from '../utils/calculations';
+import { Save, PlusCircle, Trash2, Receipt, Minus, Plus, UserCircle, ChevronDown, Wallet, ArrowRight, UserPlus, Phone, Armchair, Tag, Calculator } from 'lucide-react';
 
 const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
   const [selectedTourId, setSelectedTourId] = useState<string>('');
@@ -22,6 +24,9 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
     guests: [],
     updatedAt: null
   });
+
+  // State for Manual Counter Logic
+  const [manualTotalGuests, setManualTotalGuests] = useState(0);
 
   const [isAddingGuest, setIsAddingGuest] = useState(false);
   const [newGuest, setNewGuest] = useState({ name: '', phone: '', seatCount: '', unitPrice: '', seatNumbers: '', seatType: 'regular' });
@@ -45,7 +50,13 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
           const data = docSnap.data() as PersonalData;
           if (!data.customExpenses) data.customExpenses = [];
           if (!data.guests) data.guests = [];
+          
           setPersonalData(data);
+          
+          // Initialize manual total if using counters
+          const total = safeNum(data.personalStandardCount) + safeNum(data.personalDisc1Count) + safeNum(data.personalDisc2Count);
+          setManualTotalGuests(total);
+
         } else {
              setPersonalData({
                 tourId: activeTour.id,
@@ -61,6 +72,7 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
                 guests: [],
                 updatedAt: null
              });
+             setManualTotalGuests(0);
         }
       } catch (err) {
         console.error("Error fetching personal data", err);
@@ -91,24 +103,34 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
     setPersonalData({ ...personalData, customExpenses: updated });
   };
 
-  // Sync counters with guest list
+  // Sync counters with guest list OR Manual Input
   useEffect(() => {
       if(personalData.guests && personalData.guests.length > 0) {
-          const totalSeats = personalData.guests.reduce((sum, g) => sum + (Number(g.seatCount)||1), 0);
-          
+          // If guest list exists, counters are strictly derived from list
           const currentD1 = personalData.guests.filter(g => g.seatType === 'disc1').reduce((sum, g) => sum + (Number(g.seatCount)||1), 0);
           const currentD2 = personalData.guests.filter(g => g.seatType === 'disc2').reduce((sum, g) => sum + (Number(g.seatCount)||1), 0);
           const currentReg = personalData.guests.filter(g => g.seatType === 'regular').reduce((sum, g) => sum + (Number(g.seatCount)||1), 0);
           
-          // Update the counters automatically based on guest list types
           setPersonalData(prev => ({
               ...prev, 
               personalStandardCount: currentReg,
               personalDisc1Count: currentD1,
               personalDisc2Count: currentD2
           }));
+          setManualTotalGuests(currentReg + currentD1 + currentD2);
+      } else {
+          // Auto Calculate Regular based on Total - (D1 + D2)
+          const d1 = safeNum(personalData.personalDisc1Count);
+          const d2 = safeNum(personalData.personalDisc2Count);
+          const regular = Math.max(0, manualTotalGuests - (d1 + d2));
+          
+          // Avoid infinite loop by checking if value actually changed
+          if (regular !== personalData.personalStandardCount) {
+               setPersonalData(prev => ({ ...prev, personalStandardCount: regular }));
+          }
       }
-  }, [personalData.guests]);
+  }, [personalData.guests, manualTotalGuests, personalData.personalDisc1Count, personalData.personalDisc2Count]);
+
 
   const handlePackageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
       const type = e.target.value as 'regular' | 'disc1' | 'disc2';
@@ -147,6 +169,7 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
   };
 
   const settlement = calculatePersonalSettlement(activeTour || {} as any, personalData);
+  const hasGuestList = personalData.guests && personalData.guests.length > 0;
 
   if (!activeTour) return (
     <div className="h-full flex flex-col items-center justify-center p-10 text-center text-slate-400">
@@ -191,6 +214,69 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
             <Save size={16} /> <span className="hidden sm:inline">সেভ করুন</span>
         </button>
       </div>
+
+      {/* GUEST COUNT SUMMARY (Manual or Derived) */}
+      <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden p-6">
+          <div className="flex items-center gap-2 mb-4">
+               <Calculator size={16} className="text-violet-500"/>
+               <h3 className="font-bold text-slate-700 text-xs uppercase tracking-widest">সিট সামারি</h3>
+          </div>
+          
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+               {/* Total - Manual Input if no guest list */}
+               <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
+                   <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">মোট গেস্ট</label>
+                   {hasGuestList ? (
+                       <p className="font-black text-slate-800 text-xl">{manualTotalGuests}</p>
+                   ) : (
+                       <input 
+                          type="number" 
+                          value={manualTotalGuests}
+                          onChange={(e) => setManualTotalGuests(safeNum(e.target.value))}
+                          className="w-full bg-white border border-slate-200 rounded-lg text-center font-black text-lg py-1 outline-none focus:ring-2 focus:ring-violet-200"
+                       />
+                   )}
+               </div>
+
+               {/* Disc 1 - Manual Input */}
+               <div className="bg-amber-50 p-3 rounded-xl border border-amber-100 text-center">
+                   <label className="text-[9px] font-bold text-amber-500 uppercase block mb-1">ডিসকাউন্ট ১</label>
+                   {hasGuestList ? (
+                       <p className="font-black text-amber-700 text-xl">{personalData.personalDisc1Count}</p>
+                   ) : (
+                       <input 
+                          type="number" 
+                          value={personalData.personalDisc1Count}
+                          onChange={(e) => setPersonalData({...personalData, personalDisc1Count: safeNum(e.target.value)})}
+                          className="w-full bg-white border border-amber-200 text-amber-700 rounded-lg text-center font-black text-lg py-1 outline-none focus:ring-2 focus:ring-amber-200"
+                       />
+                   )}
+               </div>
+
+               {/* Disc 2 - Manual Input */}
+               <div className="bg-orange-50 p-3 rounded-xl border border-orange-100 text-center">
+                   <label className="text-[9px] font-bold text-orange-500 uppercase block mb-1">ডিসকাউন্ট ২</label>
+                   {hasGuestList ? (
+                       <p className="font-black text-orange-700 text-xl">{personalData.personalDisc2Count}</p>
+                   ) : (
+                       <input 
+                          type="number" 
+                          value={personalData.personalDisc2Count}
+                          onChange={(e) => setPersonalData({...personalData, personalDisc2Count: safeNum(e.target.value)})}
+                          className="w-full bg-white border border-orange-200 text-orange-700 rounded-lg text-center font-black text-lg py-1 outline-none focus:ring-2 focus:ring-orange-200"
+                       />
+                   )}
+               </div>
+
+               {/* Regular - Auto Calculated */}
+               <div className="bg-violet-50 p-3 rounded-xl border border-violet-100 text-center relative overflow-hidden">
+                   <div className="absolute top-0 right-0 bg-violet-200 text-violet-700 text-[8px] font-bold px-1.5 py-0.5 rounded-bl-lg">AUTO</div>
+                   <label className="text-[9px] font-bold text-violet-500 uppercase block mb-1">রেগুলার</label>
+                   <p className="font-black text-violet-700 text-xl">{personalData.personalStandardCount}</p>
+               </div>
+          </div>
+          <p className="text-[9px] text-slate-400 text-center mt-3">* রেগুলার সিট = মোট গেস্ট - (ডিসকাউন্ট ১ + ডিসকাউন্ট ২)</p>
+      </div>
       
       {/* Guest List Card */}
       <div className="bg-white rounded-[2.5rem] shadow-lg shadow-slate-200/50 border border-slate-100 overflow-hidden">
@@ -226,9 +312,9 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
                                 onChange={handlePackageChange}
                                 className="w-full border border-slate-200 bg-white p-3.5 rounded-xl text-xs outline-none font-bold focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none"
                             >
-                                <option value="regular">রেগুলার (৳{activeTour.fees.regular})</option>
-                                <option value="disc1">ডিসকাউন্ট ১ (৳{activeTour.fees.disc1})</option>
-                                <option value="disc2">ডিসকাউন্ট ২ (৳{activeTour.fees.disc2})</option>
+                                <option value="regular">রেগুলার (৳{activeTour.fees?.regular})</option>
+                                <option value="disc1">ডিসকাউন্ট ১ (৳{activeTour.fees?.disc1})</option>
+                                <option value="disc2">ডিসকাউন্ট ২ (৳{activeTour.fees?.disc2})</option>
                             </select>
                             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14}/>
                          </div>
@@ -360,8 +446,8 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
             <div className="relative p-8 sm:p-10 text-white">
                 <div className="flex justify-between items-center mb-8 sm:mb-10 border-b border-white/10 pb-6">
                     <div>
-                        <p className="text-[10px] text-white/60 uppercase tracking-[0.2em] mb-2 font-bold">ব্যক্তিগত ব্যালেন্স</p>
-                        <h3 className="text-xl sm:text-2xl font-black tracking-tight">হিসাব বিবরণী</h3>
+                        <p className="text-[10px] text-white/60 uppercase tracking-[0.2em] mb-2 font-bold">ব্যক্তিগত হিসাব</p>
+                        <h3 className="text-xl sm:text-2xl font-black tracking-tight">প্রফিট / লস স্টেটমেন্ট</h3>
                     </div>
                     <div className="bg-white/10 p-3 sm:p-4 rounded-2xl backdrop-blur-md border border-white/10 shadow-lg">
                         <Wallet size={32} className="text-white" />
@@ -374,8 +460,8 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
                         <span className="font-bold text-white font-mono text-base sm:text-lg">৳ {settlement.totalPersonalIncome.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-white/70">
-                        <span className="font-bold">বাদ: শেয়ার খরচ</span>
-                        <span className="font-bold text-orange-300 font-mono text-base sm:text-lg">- ৳ {settlement.hostShareOfBusRent.toLocaleString()}</span>
+                        <span className="font-bold">বাদ: সিট খরচ (Buy Rate)</span>
+                        <span className="font-bold text-orange-300 font-mono text-base sm:text-lg">- ৳ {settlement.totalPersonalCost.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-white/70">
                         <span className="font-bold">বাদ: ব্যক্তিগত খরচ</span>
