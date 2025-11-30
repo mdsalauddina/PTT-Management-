@@ -1,8 +1,10 @@
+
+
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, PartnerAgency, Guest } from '../types';
 import { db } from '../services/firebase';
 import { doc, updateDoc, Timestamp } from 'firebase/firestore';
-import { calculateAgencySettlement, safeNum } from '../utils/calculations';
+import { calculateAgencySettlement, safeNum, recalculateTourSeats } from '../utils/calculations';
 import { Users, Phone, Plus, Trash, ChevronDown, UserPlus, Briefcase, Mail, Star, Edit3, X, Check, FolderOpen, Armchair } from 'lucide-react';
 
 const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) => {
@@ -42,6 +44,7 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
           const tourRef = doc(db, 'tours', activeTour.id);
           const cleanAgencies = JSON.parse(JSON.stringify(agencies));
           await updateDoc(tourRef, { partnerAgencies: cleanAgencies, updatedAt: Timestamp.now() });
+          await recalculateTourSeats(activeTour.id); // Dynamic seat update
           await refreshTours();
       } catch (e) {
           console.error("Error updating tour agencies", e);

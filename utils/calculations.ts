@@ -1,5 +1,8 @@
 
+
 import { BusConfig, PartnerAgency, Tour, PersonalData, Guest } from '../types';
+import { db } from '../services/firebase';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 
 // Helper to safely convert to number
 export const safeNum = (val: any): number => {
@@ -16,7 +19,7 @@ const getGuestSeatCount = (guest: Guest): number => {
   return safeNum(guest.seatCount) || 1;
 };
 
-// Bus Fare Calculation
+// Bus Fare Calculation (Always based on Capacity/Total Seats)
 export const calculateBusFare = (busConfig: BusConfig) => {
   if (!busConfig) return { regularFare: 0, discount1Fare: 0, discount2Fare: 0, baseFare: 0, totalDiscountLoss: 0 };
 
@@ -61,15 +64,23 @@ export const calculateTotalOtherFixedCosts = (tour: Tour): number => {
 };
 
 // Shared Helper to calculate Buy Rates
+// Variable Costs are now divided by TOTAL GUESTS (if > 0), not Total Seats.
+// Bus Fare remains divided by Total Seats (handled in calculateBusFare).
 export const calculateBuyRates = (tour: Tour) => {
     const totalBusSeats = (safeNum(tour.busConfig?.regularSeats) + safeNum(tour.busConfig?.discount1Seats) + safeNum(tour.busConfig?.discount2Seats)) || 1;
     
+    // Divisor for Variable Costs: Use Total Guests if available, else Fallback to Seats
+    const variableCostDivisor = (tour.totalGuests && tour.totalGuests > 0) ? tour.totalGuests : totalBusSeats;
+
     const hostFee = safeNum(tour.costs?.hostFee);
     const hotelCost = safeNum(tour.costs?.hotelCost); 
     const otherFixedTotal = calculateTotalOtherFixedCosts(tour);
     const dailyExpensesTotal = calculateTotalDailyExpenses(tour);
     
-    const variableCostPerHead = (hostFee + hotelCost + otherFixedTotal + dailyExpensesTotal) / totalBusSeats;
+    // Variable Cost Per Head (based on Guest Count)
+    const variableCostPerHead = (hostFee + hotelCost + otherFixedTotal + dailyExpensesTotal) / variableCostDivisor;
+    
+    // Bus Cost Per Head (based on Bus Capacity/Config)
     const busFares = calculateBusFare(tour.busConfig);
 
     return {
@@ -152,30 +163,23 @@ export const calculatePersonalSettlement = (tour: Tour, personalData: PersonalDa
 
     if (personalData.guests && personalData.guests.length > 0) {
         personalData.guests.forEach(g => {
-             // Income Logic:
-             // If breakdown exists, calculate income based on package counts * fees
-             // Otherwise fallback to collection amount
-             
-             if (g.paxBreakdown) {
-                 const incReg = safeNum(g.paxBreakdown.regular) * regFee;
-                 const incD1 = safeNum(g.paxBreakdown.disc1) * d1Fee;
-                 const incD2 = safeNum(g.paxBreakdown.disc2) * d2Fee;
-                 
-                 // If collection is manually set and differs significantly (e.g. partial payment), we might want to use collection. 
-                 // But the requirement says "Mot income hobe je package a joto Jon Manush ashe". 
-                 // We will trust the calculated package price, OR the manually entered collection if the user overrides it in the form.
-                 // In the form, we save the total calculated to 'collection'. So we just use 'collection'.
-                 totalPersonalIncome += safeNum(g.collection);
+             // 1. Income Logic
+             if (g.feeBreakdown) {
+                 const incReg = safeNum(g.feeBreakdown.regular) * regFee;
+                 const incD1 = safeNum(g.feeBreakdown.disc1) * d1Fee;
+                 const incD2 = safeNum(g.feeBreakdown.disc2) * d2Fee;
+                 totalPersonalIncome += (incReg + incD1 + incD2);
+             } else {
+                totalPersonalIncome += safeNum(g.collection);
+             }
 
-                 // Cost Logic (Buy Rate):
+             // 2. Cost Logic
+             if (g.paxBreakdown) {
                  const costReg = safeNum(g.paxBreakdown.regular) * rates.regular;
                  const costD1 = safeNum(g.paxBreakdown.disc1) * rates.d1;
                  const costD2 = safeNum(g.paxBreakdown.disc2) * rates.d2;
-                 
                  totalPersonalCost += (costReg + costD1 + costD2);
              } else {
-                 // Fallback for legacy data
-                 totalPersonalIncome += safeNum(g.collection);
                  const seats = getGuestSeatCount(g);
                  if (g.seatType === 'disc1') totalPersonalCost += seats * rates.d1;
                  else if (g.seatType === 'disc2') totalPersonalCost += seats * rates.d2;
@@ -183,14 +187,12 @@ export const calculatePersonalSettlement = (tour: Tour, personalData: PersonalDa
              }
         });
     } else {
-        // Fallback to manual counters if no guest list
+        // Fallback counters
         const regCount = safeNum(personalData.personalStandardCount);
         const d1Count = safeNum(personalData.personalDisc1Count);
         const d2Count = safeNum(personalData.personalDisc2Count);
 
         totalPersonalIncome += (regCount * regFee) + (d1Count * d1Fee) + (d2Count * d2Fee);
-        
-        // Cost (Liability)
         totalPersonalCost += (regCount * rates.regular) + (d1Count * rates.d1) + (d2Count * rates.d2);
     }
 
@@ -201,6 +203,85 @@ export const calculatePersonalSettlement = (tour: Tour, personalData: PersonalDa
         personalExpenses,
         totalPersonalCost, 
         netResult,
-        fees: { regFee, d1Fee, d2Fee } // Return used fees for display
+        fees: { regFee, d1Fee, d2Fee }
     };
+};
+
+// DYNAMIC SEAT RECALCULATION & TOTAL GUEST COUNT
+export const recalculateTourSeats = async (tourId: string) => {
+    try {
+        const tourRef = doc(db, 'tours', tourId);
+        const tourSnap = await getDoc(tourRef);
+        if (!tourSnap.exists()) return;
+        
+        const tour = tourSnap.data() as Tour;
+        const totalSeats = Number(tour.busConfig?.totalSeats) || 40;
+        
+        let totalD1 = 0;
+        let totalD2 = 0;
+        let totalGuests = 0;
+
+        // 1. Calculate from Partner Agencies
+        if (tour.partnerAgencies) {
+            tour.partnerAgencies.forEach(agency => {
+                if (agency.guests) {
+                    agency.guests.forEach(g => {
+                        const guestSeats = getGuestSeatCount(g);
+                        totalGuests += guestSeats; // Count total guests/seats occupied
+
+                        if (g.paxBreakdown) {
+                            totalD1 += Number(g.paxBreakdown.disc1 || 0);
+                            totalD2 += Number(g.paxBreakdown.disc2 || 0);
+                        } else {
+                            if (g.seatType === 'disc1') totalD1 += guestSeats;
+                            if (g.seatType === 'disc2') totalD2 += guestSeats;
+                        }
+                    });
+                }
+            });
+        }
+
+        // 2. Calculate from Personal Data (All users for this tour)
+        const q = query(collection(db, 'personal'), where('tourId', '==', tourId));
+        const pSnaps = await getDocs(q);
+        
+        pSnaps.forEach(pDoc => {
+            const pData = pDoc.data() as PersonalData;
+            if (pData.guests && pData.guests.length > 0) {
+                 pData.guests.forEach(g => {
+                    const guestSeats = getGuestSeatCount(g);
+                    totalGuests += guestSeats;
+
+                    if (g.paxBreakdown) {
+                        totalD1 += Number(g.paxBreakdown.disc1 || 0);
+                        totalD2 += Number(g.paxBreakdown.disc2 || 0);
+                    } else {
+                        if (g.seatType === 'disc1') totalD1 += guestSeats;
+                        if (g.seatType === 'disc2') totalD2 += guestSeats;
+                    }
+                 });
+            } else {
+                // Fallback for old data
+                const d1 = Number(pData.personalDisc1Count || 0);
+                const d2 = Number(pData.personalDisc2Count || 0);
+                const reg = Number(pData.personalStandardCount || 0);
+                totalD1 += d1;
+                totalD2 += d2;
+                totalGuests += (reg + d1 + d2);
+            }
+        });
+
+        // 3. Update Bus Config and Total Guests
+        const regularSeats = Math.max(0, totalSeats - totalD1 - totalD2);
+        
+        await updateDoc(tourRef, {
+            'busConfig.regularSeats': regularSeats,
+            'busConfig.discount1Seats': totalD1,
+            'busConfig.discount2Seats': totalD2,
+            'totalGuests': totalGuests // Store calculated total guests
+        });
+        
+    } catch (e) {
+        console.error("Error recalculating seats:", e);
+    }
 };

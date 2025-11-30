@@ -52,7 +52,16 @@ export interface Guest {
   unitPrice: number; // Per seat collection amount
   collection: number; // Total collection (seatCount * unitPrice)
   seatType: 'regular' | 'disc1' | 'disc2'; // Kept for backward compatibility/default
+  
+  // Seat Usage (Determines Cost/Liability)
   paxBreakdown?: {
+    regular: number;
+    disc1: number;
+    disc2: number;
+  };
+  
+  // Payment Package (Determines Income) - New Field
+  feeBreakdown?: {
     regular: number;
     disc1: number;
     disc2: number;
@@ -85,6 +94,7 @@ export interface Tour {
   busConfig: BusConfig;
   costs: TourCosts;
   partnerAgencies: PartnerAgency[];
+  totalGuests?: number; // Total number of confirmed guests (Personal + Agency)
   createdAt: any;
   updatedAt: any;
 }

@@ -56,10 +56,10 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
     busConfig: {
       totalRent: 0,
       totalSeats: 40,
-      regularSeats: 30,
-      discount1Seats: 5,
+      regularSeats: 40, // Default to all regular
+      discount1Seats: 0,
       discount1Amount: 200,
-      discount2Seats: 5,
+      discount2Seats: 0,
       discount2Amount: 300
     },
     costs: {
@@ -160,6 +160,8 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
              };
           } else {
              const cleanData = sanitizeData(tourData, true);
+             // Ensure bus seats are preserved if not explicitly editable
+             // But here we are editing totalRent/totalSeats/amounts
              updateData = { ...cleanData, updatedAt: Timestamp.now() };
           }
           
@@ -493,34 +495,27 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
                         </div>
                         
                         <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                            <label className="text-[9px] font-bold text-slate-400 uppercase mb-2 block">সিট কনফিগারেশন</label>
-                            <div className="space-y-2">
-                                <div className="flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-100">
-                                    <div className="w-16">
-                                        <span className="text-[8px] font-bold text-slate-400 block">রেগুলার</span>
-                                        <input type="number" value={tourData.busConfig?.regularSeats} onChange={e => setTourData({...tourData, busConfig: {...tourData.busConfig!, regularSeats: safeNumInput(e)}})} 
-                                        className="w-full text-center font-bold border-b border-slate-200 outline-none text-xs py-1" />
-                                    </div>
-                                    <div className="flex-1 text-[9px] text-slate-300 font-bold border-l pl-2">বাকি সিট</div>
-                                </div>
-                                {['discount1', 'discount2'].map((type, idx) => {
-                                    const keySeats = `${type}Seats` as keyof BusConfig;
-                                    const keyAmount = `${type}Amount` as keyof BusConfig;
-                                    return (
-                                        <div key={type} className="flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-100">
-                                            <div className="w-16">
-                                                <span className="text-[8px] font-bold text-slate-400 block">ডিস {idx+1} সিট</span>
-                                                <input type="number" value={tourData.busConfig?.[keySeats] as number} onChange={e => setTourData({...tourData, busConfig: {...tourData.busConfig!, [keySeats]: safeNumInput(e)}})} 
-                                                className="w-full text-center font-bold border-b border-slate-200 outline-none text-xs py-1" />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <span className="text-[8px] font-bold text-slate-400 block truncate">জনপ্রতি ছাড়</span>
+                            <label className="text-[9px] font-bold text-slate-400 uppercase mb-2 block">বাস ও সিট ডিসকাউন্ট</label>
+                            <div className="space-y-3">
+                                <InputGroup label="মোট সিট (Total Seats)">
+                                    <StyledInput type="number" className="font-bold text-slate-700 text-center" value={tourData.busConfig?.totalSeats} onChange={(e: any) => setTourData({...tourData, busConfig: {...tourData.busConfig!, totalSeats: safeNumInput(e)}})} />
+                                </InputGroup>
+                                
+                                <div className="space-y-2 pt-2 border-t border-slate-200">
+                                    {['discount1', 'discount2'].map((type, idx) => {
+                                        const keyAmount = `${type}Amount` as keyof BusConfig;
+                                        return (
+                                            <div key={type} className="flex justify-between items-center bg-white p-2 rounded-lg border border-slate-100">
+                                                <span className="text-[9px] font-bold text-slate-500 block truncate">ডিস {idx+1} ছাড়ের পরিমাণ</span>
                                                 <input type="number" value={tourData.busConfig?.[keyAmount] as number} onChange={e => setTourData({...tourData, busConfig: {...tourData.busConfig!, [keyAmount]: safeNumInput(e)}})} 
-                                                className="w-full font-bold text-rose-500 border-b border-slate-200 outline-none text-xs py-1" />
+                                                className="w-24 font-bold text-rose-500 border-b border-slate-200 outline-none text-xs py-1 text-right" placeholder="Amount" />
                                             </div>
-                                        </div>
-                                    )
-                                })}
+                                        )
+                                    })}
+                                </div>
+                                <p className="text-[8px] text-slate-400 italic text-center mt-2">
+                                    * ডিসকাউন্ট ও রেগুলার সিটের সংখ্যা গেস্ট এন্ট্রি থেকে অটোমেটিক আপডেট হবে।
+                                </p>
                             </div>
                         </div>
                     </Card>

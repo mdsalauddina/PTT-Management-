@@ -5,7 +5,7 @@ import { Tour, UserProfile, Guest, PartnerAgency } from '../types';
 import { db } from '../services/firebase';
 import { doc, updateDoc, Timestamp } from 'firebase/firestore';
 import { ChevronDown, LogOut, Users, Plus, Phone, Info, Star, Calendar, History, Wallet, LayoutGrid, Sparkles, Briefcase, Armchair, Tag, Clock, MapPin, X, CheckCircle, Calculator } from 'lucide-react';
-import { calculateAgencySettlement, calculateBusFare, calculateTotalOtherFixedCosts, safeNum } from '../utils/calculations';
+import { calculateAgencySettlement, calculateBusFare, calculateTotalOtherFixedCosts, safeNum, recalculateTourSeats } from '../utils/calculations';
 
 interface AgencyDashboardProps {
   user: UserProfile;
@@ -91,7 +91,10 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
   // Breakdown Calculation for Display
   const calculateBreakdown = (tour: Tour) => {
       if (!tour) return null;
-      const totalSeats = safeNum(tour.busConfig?.totalSeats) || 1;
+      
+      const totalBusSeats = safeNum(tour.busConfig?.totalSeats) || 1;
+      // Variable costs divided by Total Guests (if > 0), else fallback to seats
+      const totalGuests = (tour.totalGuests && tour.totalGuests > 0) ? tour.totalGuests : totalBusSeats;
       
       // 1. Host Fee
       const totalHostFee = safeNum(tour.costs?.hostFee);
@@ -109,19 +112,20 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
       const totalFixedOther = calculateTotalOtherFixedCosts(tour);
       const totalOthers = totalDailyOther + totalFixedOther;
 
-      // Per Heads
-      const perHeadHost = Math.ceil(totalHostFee / totalSeats);
-      const perHeadHotel = Math.ceil(totalHotel / totalSeats);
-      const perHeadFood = Math.ceil(totalFood / totalSeats);
-      const perHeadOthers = Math.ceil(totalOthers / totalSeats);
+      // Per Heads (Using Total Guests for Variable Costs)
+      const perHeadHost = Math.ceil(totalHostFee / totalGuests);
+      const perHeadHotel = Math.ceil(totalHotel / totalGuests);
+      const perHeadFood = Math.ceil(totalFood / totalGuests);
+      const perHeadOthers = Math.ceil(totalOthers / totalGuests);
 
-      // Bus Fares
+      // Bus Fares (Still based on Total Capacity/Seats)
       const busFares = calculateBusFare(tour.busConfig);
       
       const totalVariablePerHead = perHeadHost + perHeadHotel + perHeadFood + perHeadOthers;
 
       return { 
-          totalSeats,
+          totalSeats: totalBusSeats,
+          totalGuests: totalGuests,
           totals: { host: totalHostFee, hotel: totalHotel, food: totalFood, others: totalOthers },
           perHead: { host: perHeadHost, hotel: perHeadHotel, food: perHeadFood, others: perHeadOthers },
           busFares,
@@ -187,6 +191,7 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
       try {
         const tourRef = doc(db, 'tours', targetTour.id);
         await updateDoc(tourRef, { partnerAgencies: agencies, updatedAt: Timestamp.now() });
+        await recalculateTourSeats(targetTour.id); // Dynamic seat update
         await refreshTours();
         closeBookingModal();
         // If user was in 'all', maybe switch to 'my'? optional.
@@ -357,22 +362,22 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
                                     <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-center">
                                         <p className="text-[9px] text-slate-400 font-bold uppercase mb-1">হোস্ট খরচ</p>
                                         <p className="font-bold text-slate-700">৳{breakdown.perHead.host}</p>
-                                        <p className="text-[8px] text-slate-400 mt-0.5">(৳{breakdown.totals.host} ÷ {breakdown.totalSeats})</p>
+                                        <p className="text-[8px] text-slate-400 mt-0.5">(৳{breakdown.totals.host} ÷ {breakdown.totalGuests})</p>
                                     </div>
                                     <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-center">
                                         <p className="text-[9px] text-slate-400 font-bold uppercase mb-1">হোটেল</p>
                                         <p className="font-bold text-slate-700">৳{breakdown.perHead.hotel}</p>
-                                        <p className="text-[8px] text-slate-400 mt-0.5">(৳{breakdown.totals.hotel} ÷ {breakdown.totalSeats})</p>
+                                        <p className="text-[8px] text-slate-400 mt-0.5">(৳{breakdown.totals.hotel} ÷ {breakdown.totalGuests})</p>
                                     </div>
                                     <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-center">
                                         <p className="text-[9px] text-slate-400 font-bold uppercase mb-1">খাবার</p>
                                         <p className="font-bold text-slate-700">৳{breakdown.perHead.food}</p>
-                                        <p className="text-[8px] text-slate-400 mt-0.5">(৳{breakdown.totals.food} ÷ {breakdown.totalSeats})</p>
+                                        <p className="text-[8px] text-slate-400 mt-0.5">(৳{breakdown.totals.food} ÷ {breakdown.totalGuests})</p>
                                     </div>
                                     <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-center">
                                         <p className="text-[9px] text-slate-400 font-bold uppercase mb-1">অন্যান্য</p>
                                         <p className="font-bold text-slate-700">৳{breakdown.perHead.others}</p>
-                                        <p className="text-[8px] text-slate-400 mt-0.5">(৳{breakdown.totals.others} ÷ {breakdown.totalSeats})</p>
+                                        <p className="text-[8px] text-slate-400 mt-0.5">(৳{breakdown.totals.others} ÷ {breakdown.totalGuests})</p>
                                     </div>
                                 </div>
                                 

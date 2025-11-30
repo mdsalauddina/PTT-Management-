@@ -6,7 +6,7 @@ import { db } from '../services/firebase';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from 'recharts';
 import { TrendingUp, Activity, Wallet, Building, Coffee, Car, Utensils, Users, ChevronDown, AlertCircle, Bus, Tags, PlusCircle, TrendingDown } from 'lucide-react';
-import { calculateBusFare, calculateTotalDailyExpenses, calculateTotalOtherFixedCosts, safeNum } from '../utils/calculations';
+import { calculateBusFare, calculateTotalDailyExpenses, calculateTotalOtherFixedCosts, safeNum, calculateBuyRates } from '../utils/calculations';
 
 const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
   const [selectedTourId, setSelectedTourId] = useState<string>('');
@@ -63,10 +63,6 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
       if (!activeTour) return;
       try {
         // Calculate Total Collection (All Personal + All Agencies)
-        // Note: In real scenarios, we should differentiate who collected what. 
-        // For this specific request, we assume Host collected all "Personal" and "Agency" revenue.
-        
-        // 1. Fetch All Personal Data for this tour
         const q = query(collection(db, 'personal'), where('tourId', '==', activeTour.id));
         const snapshot = await getDocs(q);
         let totalPersonalCol = 0;
@@ -123,11 +119,6 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
     : 0;
 
   const totalBooked = agencyGuests + personalGuestCount;
-  
-  // CHANGED: Total seats based on Regular Seats as requested (Re-verified: User asked for Regular+Discounts)
-  // Wait, previous prompt said "Analysis tab a Bus er total seat hobe regular seat number". 
-  // BUT the latest prompt says "Tour a bus seat hisab hobe (regular seat+discounts seat)".
-  // I will follow the LATEST prompt: Regular + D1 + D2
   const totalSeats = safeNum(activeTour.busConfig.regularSeats) + safeNum(activeTour.busConfig.discount1Seats) + safeNum(activeTour.busConfig.discount2Seats) || 40;
   
   const occupancyRate = totalSeats > 0 ? Math.min((totalBooked / totalSeats) * 100, 100) : 0;
@@ -161,24 +152,18 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
   const totalExpenses = totalBusRent + totalHostFee + totalHotelCost + totalOtherFixed + totalDailyMeals + totalDailyTransport + totalDailyExtra;
   const netProfit = totalIncome - totalExpenses;
 
-  // Host Settlement Calculation
-  // Host Spending = Daily Expenses + Other Fixed (Assumed host manages these)
+  // Host Settlement Balance
   const hostSpending = (totalDailyMeals + totalDailyTransport + totalDailyExtra) + totalOtherFixed;
   const hostSettlementBalance = hostCollection - hostSpending;
 
-  // Per Head Calculations
-  const calcPerHead = (amount: number) => Math.ceil(amount / (totalSeats || 1));
+  // Per Head Logic:
+  // Variable costs -> divide by Total Guests (totalBooked)
+  // Fixed Bus Rent -> divide by Total Seats (Capacity)
+  const calcPerHeadVariable = (amount: number) => Math.ceil(amount / (totalBooked > 0 ? totalBooked : 1));
+  const calcPerHeadBus = (amount: number) => Math.ceil(amount / (totalSeats > 0 ? totalSeats : 1));
 
-  // --- COST PER SEAT TYPE CALCULATION ---
-  const dailyExpensesTotal = calculateTotalDailyExpenses(activeTour);
-  const variableCostPerHead = (totalHostFee + totalHotelCost + totalOtherFixed + dailyExpensesTotal) / totalSeats;
-  const busFares = calculateBusFare(activeTour.busConfig);
-
-  const costPerSeat = {
-      regular: Math.ceil(busFares.regularFare + variableCostPerHead),
-      d1: Math.ceil(busFares.discount1Fare + variableCostPerHead),
-      d2: Math.ceil(busFares.discount2Fare + variableCostPerHead)
-  };
+  // Use updated calculation shared utility for Cost Per Seat
+  const costPerSeat = calculateBuyRates(activeTour);
 
   const seatData = [
     { name: 'বুকড', value: totalBooked, color: '#6366f1' },
@@ -301,12 +286,22 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
                         </tr>
                     </thead>
                     <tbody className="text-xs font-bold text-slate-600">
+                        {/* Bus Rent - Divided by Total Seats (Capacity) */}
+                        <tr className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                            <td className="p-3 flex items-center gap-2 whitespace-nowrap">
+                                <div className="w-1.5 h-1.5 rounded-full bg-violet-600"></div>
+                                বাস ভাড়া
+                            </td>
+                            <td className="p-3 text-right font-mono text-slate-700">৳{totalBusRent.toLocaleString()}</td>
+                            <td className="p-3 text-right font-mono text-slate-500 bg-slate-50/30">৳{calcPerHeadBus(totalBusRent)} <span className="text-[8px] opacity-50">(সীট)</span></td>
+                        </tr>
+
+                        {/* Variable Costs - Divided by Total Guests */}
                         {[
-                            { label: 'বাস ভাড়া', total: totalBusRent, icon: Bus, color: 'text-violet-600' },
                             { label: 'হোটেল ভাড়া', total: totalHotelCost, icon: Building, color: 'text-indigo-600' },
                             { label: 'খাবার', total: totalDailyMeals, icon: Utensils, color: 'text-orange-600' },
                             { label: 'লোকাল গাড়ি', total: totalDailyTransport, icon: Car, color: 'text-blue-600' },
-                            { label: 'ম্যানেজমেন্ট', total: totalHostFee, icon: Users, color: 'text-teal-600' },
+                            { label: 'হোস্ট খরচ', total: totalHostFee, icon: Users, color: 'text-teal-600' },
                             { label: 'অন্যান্য ফিক্সড', total: totalOtherFixed, icon: PlusCircle, color: 'text-teal-500' },
                             { label: 'দৈনিক অন্যান্য', total: totalDailyExtra, icon: Coffee, color: 'text-slate-600' },
                         ].map((item, i) => (
@@ -316,13 +311,13 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
                                     {item.label}
                                 </td>
                                 <td className="p-3 text-right font-mono text-slate-700">৳{item.total.toLocaleString()}</td>
-                                <td className="p-3 text-right font-mono text-slate-500 bg-slate-50/30">৳{calcPerHead(item.total)}</td>
+                                <td className="p-3 text-right font-mono text-slate-500 bg-slate-50/30">৳{calcPerHeadVariable(item.total)} <span className="text-[8px] opacity-50">(গেস্ট)</span></td>
                             </tr>
                         ))}
                         <tr className="bg-slate-50/80">
                             <td className="p-3 text-[10px] font-black text-rose-600 uppercase">সর্বমোট</td>
                             <td className="p-3 text-right font-black text-rose-600 text-sm">৳{totalExpenses.toLocaleString()}</td>
-                            <td className="p-3 text-right font-black text-rose-600 text-sm">৳{calcPerHead(totalExpenses)}</td>
+                            <td className="p-3 text-right font-black text-rose-600 text-sm">-</td>
                         </tr>
                     </tbody>
                 </table>
@@ -377,7 +372,7 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
               </div>
           </div>
           <p className="text-[9px] text-slate-400 mt-3 text-center leading-relaxed">
-              * খরচ = বাস ভাড়া (টাইপ ভিত্তিক) + (ফিক্সড খরচ + দৈনিক খরচ) ÷ মোট সিট ({totalSeats})
+              * খরচ = বাস ভাড়া (ফিক্সড) + (অন্যান্য খরচ ÷ মোট গেস্ট)
           </p>
       </div>
 

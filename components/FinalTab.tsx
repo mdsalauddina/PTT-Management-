@@ -1,9 +1,10 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, PersonalData } from '../types';
 import { db } from '../services/firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { CheckCircle, TrendingUp, Activity, CalendarDays, ChevronDown, Building, ArrowRight } from 'lucide-react';
+import { CheckCircle, TrendingUp, Activity, CalendarDays, ChevronDown, Building, FileText } from 'lucide-react';
 import { calculateTotalOtherFixedCosts, safeNum } from '../utils/calculations';
 
 const FinalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
@@ -41,7 +42,7 @@ const FinalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
 
                     let pCollection = 0;
                     if (data.guests && data.guests.length > 0) {
-                        // Trust guest collection sum + booking fee
+                        // Trust guest collection (which is derived from fees/packages or manual override)
                         pCollection = data.guests.reduce((sum, g) => sum + safeNum(g.collection), 0) + bookingFee;
                     } else {
                         // Fallback counters
@@ -106,12 +107,12 @@ const FinalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
   });
 
   return (
-    <div className="space-y-4 animate-fade-in pb-24 max-w-2xl mx-auto font-sans">
+    <div className="space-y-4 animate-fade-in pb-24 max-w-xl mx-auto font-sans">
       {/* Date Selector */}
-      <div className="flex items-center justify-between bg-white px-4 py-3 rounded-2xl border border-slate-200 shadow-sm sticky top-0 z-20">
+      <div className="flex items-center justify-between bg-white px-3 py-2.5 rounded-2xl border border-slate-200 shadow-sm sticky top-0 z-20">
         <div className="flex items-center gap-3">
-            <div className="p-2 bg-teal-50 text-teal-600 rounded-xl">
-                <CalendarDays size={18} />
+            <div className="p-1.5 bg-teal-50 text-teal-600 rounded-lg">
+                <CalendarDays size={16} />
             </div>
             <div>
                 <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mb-0.5">রিপোর্ট তারিখ</p>
@@ -133,75 +134,55 @@ const FinalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
         </div>
       </div>
 
-      {/* COMPACT SUMMARY CARD */}
-      <div className={`relative overflow-hidden rounded-3xl p-5 text-white shadow-lg transition-all ${grandTotalProfit >= 0 ? 'bg-gradient-to-r from-emerald-600 to-teal-700' : 'bg-gradient-to-r from-rose-600 to-orange-700'}`}>
-         <div className="flex justify-between items-center mb-4">
+      {/* COMPACT SUMMARY HEADER */}
+      <div className={`rounded-2xl p-4 text-white shadow-lg transition-colors ${grandTotalProfit >= 0 ? 'bg-emerald-600' : 'bg-rose-600'}`}>
+         <div className="flex justify-between items-end mb-3">
              <div>
-                 <p className="text-[9px] font-bold uppercase tracking-widest opacity-80 mb-1">সর্বমোট নেট প্রফিট / লস</p>
-                 <h2 className="text-3xl font-black tracking-tight">
-                    {grandTotalProfit >= 0 ? '+' : ''}{grandTotalProfit.toLocaleString()} <span className="text-lg opacity-70">৳</span>
+                 <p className="text-[8px] font-bold uppercase tracking-widest opacity-80 mb-0.5">সর্বমোট নেট প্রফিট / লস</p>
+                 <h2 className="text-2xl font-black tracking-tight">
+                    {grandTotalProfit >= 0 ? '+' : ''}{grandTotalProfit.toLocaleString()} ৳
                  </h2>
              </div>
-             <div className="bg-white/20 p-2.5 rounded-xl backdrop-blur-md">
-                 {grandTotalProfit >= 0 ? <TrendingUp size={20} /> : <Activity size={20} />}
+             <div className="bg-white/20 p-1.5 rounded-lg backdrop-blur-md">
+                 {grandTotalProfit >= 0 ? <TrendingUp size={16} /> : <Activity size={16} />}
              </div>
          </div>
-         <div className="flex gap-4 pt-4 border-t border-white/10 text-xs font-bold font-mono">
-             <div className="flex-1 bg-white/10 rounded-lg p-2 text-center">
-                 <span className="block opacity-60 text-[8px] uppercase font-sans mb-0.5">মোট কালেকশন</span>
-                 ৳{grandTotalCollection.toLocaleString()}
-             </div>
-             <div className="flex-1 bg-white/10 rounded-lg p-2 text-center">
-                 <span className="block opacity-60 text-[8px] uppercase font-sans mb-0.5">মোট খরচ</span>
-                 ৳{grandTotalExpense.toLocaleString()}
-             </div>
+         <div className="grid grid-cols-2 gap-2 text-[10px] font-bold opacity-90 border-t border-white/20 pt-2">
+             <div className="flex justify-between"><span>মোট কালেকশন</span> <span>৳{grandTotalCollection.toLocaleString()}</span></div>
+             <div className="flex justify-between"><span>মোট খরচ</span> <span>৳{grandTotalExpense.toLocaleString()}</span></div>
          </div>
       </div>
 
       {/* COMPACT LIST */}
-      <div className="space-y-3">
-          <div className="flex items-center gap-2 px-2 mb-1">
-              <Building size={14} className="text-slate-400" />
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="px-4 py-2 bg-slate-50/50 border-b border-slate-100 flex items-center gap-1.5">
+              <FileText size={12} className="text-slate-400" />
               <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">বিস্তারিত রিপোর্ট</h3>
           </div>
 
           {loading ? (
-             <div className="p-8 text-center text-slate-400 text-[10px] font-bold animate-pulse bg-slate-50 rounded-2xl border border-slate-100">ডাটা প্রসেসিং...</div>
+             <div className="p-8 text-center text-slate-400 text-[10px] font-bold animate-pulse">ডাটা প্রসেসিং...</div>
+          ) : selectedTours.length === 0 ? (
+             <div className="text-center p-8 text-slate-400 text-[10px] font-bold italic">কোন ইভেন্ট নেই</div>
           ) : (
-            tourReports.map(tour => (
-                <div key={tour.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:shadow-md transition-all">
-                    <div className="flex-1 min-w-0">
-                        <h4 className="font-bold text-slate-800 text-xs leading-tight mb-2 truncate">{tour.name}</h4>
-                        <div className="flex gap-2">
-                            <span className="text-[9px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded border border-emerald-100 font-bold whitespace-nowrap">
-                                আয়: ৳{tour.income}
-                            </span>
-                            <span className="text-[9px] bg-rose-50 text-rose-600 px-2 py-0.5 rounded border border-rose-100 font-bold whitespace-nowrap">
-                                ব্যয়: ৳{tour.expense}
-                            </span>
+             <div className="divide-y divide-slate-50">
+                {tourReports.map(tour => (
+                    <div key={tour.id} className="p-3 hover:bg-slate-50 transition-colors flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                            <h4 className="font-bold text-slate-800 text-xs truncate mb-1">{tour.name}</h4>
+                            <div className="flex gap-2 text-[9px] font-bold">
+                                <span className="text-emerald-600">আয়: ৳{tour.income}</span>
+                                <span className="text-slate-300">|</span>
+                                <span className="text-rose-500">ব্যয়: ৳{tour.expense}</span>
+                            </div>
                         </div>
-                    </div>
-                    
-                    <div className={`flex items-center gap-3 pl-4 sm:border-l border-slate-100 w-full sm:w-auto justify-between sm:justify-end ${tour.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                         <div className="text-right">
-                            <p className="text-[8px] font-bold uppercase tracking-wider mb-0.5">
-                                {tour.profit >= 0 ? 'লাভ' : 'লস'}
-                            </p>
-                            <p className="text-lg font-black">
-                                ৳{Math.abs(tour.profit).toLocaleString()}
-                            </p>
-                        </div>
-                        <div className={`p-1.5 rounded-full ${tour.profit >= 0 ? 'bg-emerald-100' : 'bg-rose-100'}`}>
-                            {tour.profit >= 0 ? <CheckCircle size={14}/> : <Activity size={14}/>}
+                             <p className={`text-xs font-black ${tour.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                 {tour.profit >= 0 ? '+' : ''}৳{Math.abs(tour.profit).toLocaleString()}
+                             </p>
                         </div>
                     </div>
-                </div>
-            ))
-          )}
-          
-          {selectedTours.length === 0 && (
-             <div className="text-center p-8 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 text-[10px] font-bold">
-                 কোন ইভেন্ট নেই
+                ))}
              </div>
           )}
       </div>
