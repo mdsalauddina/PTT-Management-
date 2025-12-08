@@ -1,15 +1,18 @@
+
+
 import React, { useState, useEffect } from 'react';
-import { CommonTabProps, PersonalData } from '../types';
+import { CommonTabProps, PersonalData, SettlementStatus } from '../types';
 import { db } from '../services/firebase';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, updateDoc, Timestamp } from 'firebase/firestore';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from 'recharts';
-import { TrendingUp, Activity, Wallet, Building, Coffee, Car, Utensils, Users, ChevronDown, AlertCircle, Bus, Tags, PlusCircle, TrendingDown } from 'lucide-react';
+import { TrendingUp, Activity, Wallet, Building, Coffee, Car, Utensils, Users, ChevronDown, AlertCircle, Bus, Tags, PlusCircle, TrendingDown, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { calculateBusFare, calculateTotalDailyExpenses, calculateTotalOtherFixedCosts, safeNum, calculateBuyRates } from '../utils/calculations';
 
-const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
+const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) => {
   const [selectedTourId, setSelectedTourId] = useState<string>('');
   const [personalGuestCount, setPersonalGuestCount] = useState<number>(0);
   const [personalCollection, setPersonalCollection] = useState<number>(0);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   // New state for Host Settlement
   const [hostCollection, setHostCollection] = useState<number>(0);
@@ -95,6 +98,26 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
     fetchHostSettlementData();
   }, [activeTour, user]);
 
+  const updateHostSettlementStatus = async (status: SettlementStatus) => {
+      if (!activeTour) return;
+      if (!window.confirm(`Are you sure you want to set status to ${status}?`)) return;
+
+      setIsUpdatingStatus(true);
+      try {
+          const tourRef = doc(db, 'tours', activeTour.id);
+          await updateDoc(tourRef, { 
+              hostSettlementStatus: status,
+              updatedAt: Timestamp.now()
+          });
+          await refreshTours();
+      } catch (e) {
+          console.error("Error updating status", e);
+          alert("Failed to update status");
+      } finally {
+          setIsUpdatingStatus(false);
+      }
+  };
+
   if (!activeTour) return (
     <div className="h-full flex flex-col items-center justify-center p-10 text-center text-slate-400">
         <TrendingUp size={20} className="mb-2 opacity-50"/>
@@ -153,16 +176,19 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
   // Host Settlement Balance
   const hostSpending = (totalDailyMeals + totalDailyTransport + totalDailyExtra) + totalOtherFixed;
   const hostSettlementBalance = hostCollection - hostSpending;
+  const hostStatus = activeTour.hostSettlementStatus || 'unpaid';
 
   // Per Head Logic:
   // Variable costs -> divide by Total Guests (totalBooked)
   // Fixed Bus Rent -> divide by Total Seats (Capacity)
-  const calcPerHeadVariable = (amount: number) => Math.ceil(amount / (totalBooked > 0 ? totalBooked : 1));
+  const variableDivisor = totalBooked > 0 ? totalBooked : 1;
+  const calcPerHeadVariable = (amount: number) => Math.ceil(amount / variableDivisor);
   const calcPerHeadBus = (amount: number) => Math.ceil(amount / (totalSeats > 0 ? totalSeats : 1));
 
   // Use updated calculation shared utility for Cost Per Seat
   const costPerSeat = calculateBuyRates(activeTour);
   const busFares = calculateBusFare(activeTour.busConfig);
+  const sharedCostPerHead = costPerSeat.regular - busFares.regularFare; // Roughly accurate for display
 
   const seatData = [
     { name: 'বুকড', value: totalBooked, color: '#6366f1' },
@@ -244,26 +270,73 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
       </div>
 
       {/* NEW HOST SETTLEMENT CARD (ADMIN VIEW) */}
-      <div className={`p-5 rounded-2xl border shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4 ${hostSettlementBalance >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-orange-50 border-orange-100'}`}>
-          <div className="flex items-center gap-4">
-              <div className={`p-3 rounded-full ${hostSettlementBalance >= 0 ? 'bg-blue-200/50 text-blue-700' : 'bg-orange-200/50 text-orange-700'}`}>
-                  {hostSettlementBalance >= 0 ? <TrendingUp size={24}/> : <TrendingDown size={24}/>}
+      <div className={`p-5 rounded-2xl border shadow-sm flex flex-col gap-4 ${hostSettlementBalance >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-orange-50 border-orange-100'}`}>
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+              <div className="flex items-center gap-4">
+                  <div className={`p-3 rounded-full ${hostSettlementBalance >= 0 ? 'bg-blue-200/50 text-blue-700' : 'bg-orange-200/50 text-orange-700'}`}>
+                      {hostSettlementBalance >= 0 ? <TrendingUp size={24}/> : <TrendingDown size={24}/>}
+                  </div>
+                  <div>
+                      <div className="flex items-center gap-2">
+                          <h3 className={`font-black uppercase text-sm tracking-wide ${hostSettlementBalance >= 0 ? 'text-blue-800' : 'text-orange-800'}`}>হোস্ট সেটেলমেন্ট</h3>
+                          
+                          {hostStatus === 'settled' && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 flex items-center gap-1"><CheckCircle size={10}/> ক্লোজড</span>
+                          )}
+                          {hostStatus === 'paid' && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 flex items-center gap-1"><Clock size={10}/> পেন্ডিং কনফার্মেশন</span>
+                          )}
+                          {hostStatus === 'unpaid' && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 flex items-center gap-1">বাকি আছে</span>
+                          )}
+                      </div>
+                      <p className="text-[10px] font-bold text-slate-500">
+                          (কালেকশন: ৳{hostCollection.toLocaleString()}) - (খরচ: ৳{hostSpending.toLocaleString()})
+                      </p>
+                  </div>
               </div>
-              <div>
-                  <h3 className={`font-black uppercase text-sm tracking-wide ${hostSettlementBalance >= 0 ? 'text-blue-800' : 'text-orange-800'}`}>হোস্ট সেটেলমেন্ট</h3>
-                  <p className="text-[10px] font-bold text-slate-500">
-                      (কালেকশন: ৳{hostCollection.toLocaleString()}) - (খরচ: ৳{hostSpending.toLocaleString()})
+              <div className="text-right">
+                  <p className={`text-3xl font-black ${hostSettlementBalance >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>
+                      {Math.abs(hostSettlementBalance).toLocaleString()} ৳
+                  </p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider opacity-60">
+                      {hostSettlementBalance >= 0 ? 'অ্যাডমিন পাবে' : 'হোস্ট পাবে'}
                   </p>
               </div>
           </div>
-          <div className="text-right">
-              <p className={`text-3xl font-black ${hostSettlementBalance >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>
-                  {Math.abs(hostSettlementBalance).toLocaleString()} ৳
-              </p>
-              <p className="text-[10px] font-bold uppercase tracking-wider opacity-60">
-                  {hostSettlementBalance >= 0 ? 'অ্যাডমিন পাবে' : 'হোস্ট পাবে'}
-              </p>
-          </div>
+          
+          {/* Admin Action Buttons */}
+          {user.role === 'admin' && (hostStatus === 'paid' || hostStatus === 'settled') && (
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200/50">
+                  {hostStatus === 'paid' && (
+                      <>
+                        <button 
+                            disabled={isUpdatingStatus}
+                            onClick={() => updateHostSettlementStatus('unpaid')}
+                            className="px-3 py-2 bg-white text-rose-600 text-[10px] font-bold uppercase tracking-wider rounded-xl shadow-sm border border-rose-100 hover:bg-rose-50 flex items-center gap-1.5"
+                        >
+                           <XCircle size={14} /> ডিক্লাইন
+                        </button>
+                        <button 
+                            disabled={isUpdatingStatus}
+                            onClick={() => updateHostSettlementStatus('settled')}
+                            className="px-4 py-2 bg-emerald-600 text-white text-[10px] font-bold uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-200 hover:bg-emerald-700 flex items-center gap-1.5"
+                        >
+                           <CheckCircle size={14} /> এক্সেপ্ট (Accept)
+                        </button>
+                      </>
+                  )}
+                  {hostStatus === 'settled' && (
+                       <button 
+                            disabled={isUpdatingStatus}
+                            onClick={() => updateHostSettlementStatus('unpaid')}
+                            className="px-3 py-1.5 bg-white/50 text-slate-500 text-[10px] font-bold rounded-lg border border-slate-200 hover:bg-white hover:text-rose-600 hover:border-rose-200 transition-colors"
+                       >
+                           Reopen
+                       </button>
+                  )}
+              </div>
+          )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -281,7 +354,7 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
                         <tr className="border-b border-slate-100">
                             <th className="p-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider">খাত</th>
                             <th className="p-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-right">মোট</th>
-                            <th className="p-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-right bg-slate-50/50">জনপ্রতি ({totalBooked} জন)</th>
+                            <th className="p-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-right bg-slate-50/50">জনপ্রতি</th>
                         </tr>
                     </thead>
                     <tbody className="text-xs font-bold text-slate-600">
@@ -292,7 +365,12 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
                                 বাস ভাড়া
                             </td>
                             <td className="p-3 text-right font-mono text-slate-700">৳{totalBusRent.toLocaleString()}</td>
-                            <td className="p-3 text-right font-mono text-slate-500 bg-slate-50/30">৳{calcPerHeadBus(totalBusRent)} <span className="text-[8px] opacity-50">/ {totalSeats}</span></td>
+                            <td className="p-3 text-right font-mono text-slate-500 bg-slate-50/30">
+                                ৳{calcPerHeadBus(totalBusRent)} 
+                                <span className="text-[8px] opacity-50 block sm:inline sm:ml-1 font-sans">
+                                    (÷{totalSeats} Seats)
+                                </span>
+                            </td>
                         </tr>
 
                         {/* Variable Costs - Divided by Total Guests */}
@@ -310,7 +388,12 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
                                     {item.label}
                                 </td>
                                 <td className="p-3 text-right font-mono text-slate-700">৳{item.total.toLocaleString()}</td>
-                                <td className="p-3 text-right font-mono text-slate-500 bg-slate-50/30">৳{calcPerHeadVariable(item.total)} <span className="text-[8px] opacity-50">/ {totalBooked}</span></td>
+                                <td className="p-3 text-right font-mono text-slate-500 bg-slate-50/30">
+                                    ৳{calcPerHeadVariable(item.total)} 
+                                    <span className="text-[8px] opacity-50 block sm:inline sm:ml-1 font-sans">
+                                        (÷{variableDivisor} Guests)
+                                    </span>
+                                </td>
                             </tr>
                         ))}
                         <tr className="bg-slate-50/80">
@@ -357,20 +440,49 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user }) => {
               <Tags size={14} className="text-slate-400"/> সিট টাইপ অনুযায়ী আসল খরচ (Buy Rate)
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-violet-50 p-4 rounded-xl border border-violet-100 text-center">
+              <div className="bg-violet-50 p-4 rounded-xl border border-violet-100 text-center relative overflow-hidden">
                   <p className="text-[9px] font-bold text-violet-400 uppercase mb-1">রেগুলার সিট</p>
-                  <p className="text-xl font-black text-violet-700">৳{costPerSeat.regular}</p>
-                  <p className="text-[10px] font-bold text-violet-400/70 mt-1">বাস ভাড়া: ৳{busFares.regularFare}</p>
+                  <p className="text-xl font-black text-violet-700 mb-2">৳{costPerSeat.regular}</p>
+                  <div className="flex flex-col gap-1">
+                      <div className="flex justify-between items-center text-[9px] font-bold bg-white/60 px-2 py-1.5 rounded-lg border border-violet-100/50">
+                          <span className="text-violet-400">বাস ভাড়া</span>
+                          <span className="text-violet-600">৳{busFares.regularFare}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-[9px] font-bold bg-white/60 px-2 py-1.5 rounded-lg border border-violet-100/50">
+                          <span className="text-violet-400">অন্যান্য</span>
+                          <span className="text-violet-600">৳{costPerSeat.regular - busFares.regularFare}</span>
+                      </div>
+                  </div>
               </div>
-              <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 text-center">
+
+              <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 text-center relative overflow-hidden">
                   <p className="text-[9px] font-bold text-amber-500 uppercase mb-1">ডিসকাউন্ট ১</p>
-                  <p className="text-xl font-black text-amber-600">৳{costPerSeat.d1}</p>
-                  <p className="text-[10px] font-bold text-amber-600/70 mt-1">বাস ভাড়া: ৳{busFares.discount1Fare}</p>
+                  <p className="text-xl font-black text-amber-600 mb-2">৳{costPerSeat.d1}</p>
+                  <div className="flex flex-col gap-1">
+                      <div className="flex justify-between items-center text-[9px] font-bold bg-white/60 px-2 py-1.5 rounded-lg border border-amber-100/50">
+                          <span className="text-amber-500/70">বাস ভাড়া</span>
+                          <span className="text-amber-600">৳{busFares.discount1Fare}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-[9px] font-bold bg-white/60 px-2 py-1.5 rounded-lg border border-amber-100/50">
+                          <span className="text-amber-500/70">অন্যান্য</span>
+                          <span className="text-amber-600">৳{costPerSeat.d1 - busFares.discount1Fare}</span>
+                      </div>
+                  </div>
               </div>
-              <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 text-center">
+
+              <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 text-center relative overflow-hidden">
                   <p className="text-[9px] font-bold text-orange-500 uppercase mb-1">ডিসকাউন্ট ২</p>
-                  <p className="text-xl font-black text-orange-600">৳{costPerSeat.d2}</p>
-                  <p className="text-[10px] font-bold text-orange-600/70 mt-1">বাস ভাড়া: ৳{busFares.discount2Fare}</p>
+                  <p className="text-xl font-black text-orange-600 mb-2">৳{costPerSeat.d2}</p>
+                  <div className="flex flex-col gap-1">
+                      <div className="flex justify-between items-center text-[9px] font-bold bg-white/60 px-2 py-1.5 rounded-lg border border-orange-100/50">
+                          <span className="text-orange-500/70">বাস ভাড়া</span>
+                          <span className="text-orange-600">৳{busFares.discount2Fare}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-[9px] font-bold bg-white/60 px-2 py-1.5 rounded-lg border border-orange-100/50">
+                          <span className="text-orange-500/70">অন্যান্য</span>
+                          <span className="text-orange-600">৳{costPerSeat.d2 - busFares.discount2Fare}</span>
+                      </div>
+                  </div>
               </div>
           </div>
           <p className="text-[9px] text-slate-400 mt-3 text-center leading-relaxed">

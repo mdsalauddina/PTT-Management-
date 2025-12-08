@@ -1,10 +1,10 @@
 
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Tour, UserProfile, Guest, PartnerAgency } from '../types';
+import { Tour, UserProfile, Guest, PartnerAgency, SettlementStatus } from '../types';
 import { db } from '../services/firebase';
 import { doc, updateDoc, Timestamp } from 'firebase/firestore';
-import { ChevronDown, LogOut, Users, Plus, Phone, Info, Star, Calendar, History, Wallet, LayoutGrid, Sparkles, Briefcase, Armchair, Tag, Clock, MapPin, X, CheckCircle, Calculator } from 'lucide-react';
+import { ChevronDown, LogOut, Users, Plus, Phone, Info, Star, Calendar, History, Wallet, LayoutGrid, Sparkles, Briefcase, Armchair, Tag, Clock, MapPin, X, CheckCircle, Calculator, MessageCircle } from 'lucide-react';
 import { calculateAgencySettlement, calculateBusFare, calculateTotalOtherFixedCosts, safeNum, recalculateTourSeats } from '../utils/calculations';
 
 interface AgencyDashboardProps {
@@ -17,6 +17,7 @@ interface AgencyDashboardProps {
 const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshTours, handleLogout }) => {
   const [activeTab, setActiveTab] = useState<'all' | 'my' | 'history'>('all');
   const [selectedTourId, setSelectedTourId] = useState<string>('');
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   
   // Booking Modal State
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
@@ -49,7 +50,7 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
   // Determine which list to use for the dropdown in details view
   const detailViewTours = activeTab === 'my' ? myBookings : historyTours;
 
-  // Auto-select first tour when switching to detail views
+  // Auto-select first tour when switching to details view
   useEffect(() => {
     if (activeTab !== 'all' && detailViewTours.length > 0) {
         setSelectedTourId(detailViewTours[0].id);
@@ -174,10 +175,16 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
       const seatCount = safeNum(newBooking.seatCount);
       const unitPrice = safeNum(newBooking.unitPrice); 
 
+      // Auto-format phone number
+      let formattedPhone = (newBooking.phone || '').trim();
+      if (formattedPhone.startsWith('01')) {
+          formattedPhone = '+88' + formattedPhone;
+      }
+
       const newGuest: Guest = {
           id: `g_${Date.now()}`,
           name: newBooking.name,
-          phone: newBooking.phone || '',
+          phone: formattedPhone,
           seatCount: seatCount,
           unitPrice: unitPrice,
           collection: seatCount * unitPrice,
@@ -201,6 +208,31 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
         alert("বুকিং যোগ করা যায়নি।");
       }
   };
+
+  const handleMarkPaid = async () => {
+    if (!activeDetailTour || !myAgencyData) return;
+    if (!window.confirm("আপনি কি নিশ্চিত যে পেমেন্ট কমপ্লিট করেছেন?")) return;
+
+    setIsUpdatingStatus(true);
+    try {
+        const agencies = activeDetailTour.partnerAgencies ? JSON.parse(JSON.stringify(activeDetailTour.partnerAgencies)) : [];
+        const idx = agencies.findIndex((a: PartnerAgency) => a.email === user.email);
+        
+        if (idx !== -1) {
+            agencies[idx].settlementStatus = 'paid';
+            const tourRef = doc(db, 'tours', activeDetailTour.id);
+            await updateDoc(tourRef, { partnerAgencies: agencies, updatedAt: Timestamp.now() });
+            await refreshTours();
+        }
+    } catch (error) {
+        console.error("Error updating status:", error);
+        alert("আপডেট ব্যর্থ হয়েছে।");
+    } finally {
+        setIsUpdatingStatus(false);
+    }
+  };
+
+  const settlementStatus = myAgencyData?.settlementStatus || 'unpaid';
 
   return (
     <div className="pb-20 lg:pb-10 min-h-screen flex flex-col bg-slate-50 font-sans text-slate-800">
@@ -416,6 +448,39 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
                              </div>
                         </div>
 
+                        {/* SETTLEMENT STATUS BAR */}
+                        {settlementStatus === 'settled' ? (
+                            <div className="bg-emerald-100 border border-emerald-200 p-4 rounded-xl flex items-center justify-center gap-2">
+                                <CheckCircle size={20} className="text-emerald-600" />
+                                <span className="font-black text-emerald-800 text-xs uppercase tracking-wide">হিসাব ক্লোজড (Settled)</span>
+                            </div>
+                        ) : settlementStatus === 'paid' ? (
+                            <div className="bg-amber-100 border border-amber-200 p-4 rounded-xl flex items-center justify-center gap-2">
+                                <Clock size={20} className="text-amber-600" />
+                                <span className="font-black text-amber-800 text-xs uppercase tracking-wide">পেমেন্ট কনফার্মেশনের অপেক্ষায় (Pending)</span>
+                            </div>
+                        ) : (
+                            // Only show payment button if money is owed to Admin (netAmount < 0)
+                            // Or if the logic is always clear balance. Usually agency owes admin if they collected less than cost?
+                            // Wait, if Net Settlement is negative, it means (Collection - Cost). 
+                            // If Negative, Agency collected LESS than cost? No.
+                            // Formula: Net = Collection - (Liability + Expenses)
+                            // If Net is POSITIVE: Agency collected MORE than liability. They OWE Admin the surplus.
+                            // If Net is NEGATIVE: Agency collected LESS. Admin OWES Agency (or Agency keeps all and admin pays diff).
+                            // Usually: Agency pays Admin the Net Amount if Positive.
+                            
+                            // Let's assume Agency pays if Net Amount > 0.
+                            settlement.netAmount > 0 && (
+                                <button 
+                                    onClick={handleMarkPaid}
+                                    disabled={isUpdatingStatus}
+                                    className="w-full py-4 bg-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-200 hover:bg-emerald-700 active:scale-95 transition-all font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2"
+                                >
+                                    {isUpdatingStatus ? 'আপডেট হচ্ছে...' : <><CheckCircle size={16}/> পেমেন্ট কমপ্লিট করুন</>}
+                                </button>
+                            )
+                        )}
+
                         {/* GUEST LIST */}
                         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mt-4">
                             <div className="px-5 py-4 border-b border-slate-50 flex justify-between items-center bg-white sticky top-0 z-10">
@@ -445,14 +510,26 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
                                                 </div>
                                                 <div>
                                                     <p className="font-bold text-slate-800 text-xs">{guest.name}</p>
-                                                    <p className="text-[9px] text-slate-400 font-bold flex items-center gap-1">
-                                                        <Phone size={8}/> {guest.phone || '-'}
+                                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                                        {guest.phone ? (
+                                                            <div className="flex items-center gap-1">
+                                                                <a href={`tel:${guest.phone}`} className="p-1 bg-emerald-50 text-emerald-600 rounded border border-emerald-100 hover:bg-emerald-100 transition-colors" title="Call">
+                                                                    <Phone size={10}/>
+                                                                </a>
+                                                                <a href={`https://wa.me/${guest.phone.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="p-1 bg-green-50 text-green-600 rounded border border-green-100 hover:bg-green-100 transition-colors" title="WhatsApp">
+                                                                    <MessageCircle size={10}/>
+                                                                </a>
+                                                                <span className="text-[9px] text-slate-400 font-bold ml-1">{guest.phone}</span>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-[9px] text-slate-400 font-bold ml-1 flex items-center gap-1"><Phone size={8}/> N/A</span>
+                                                        )}
                                                         {guest.seatNumbers && (
-                                                            <span className="text-violet-600 bg-violet-50 px-1 rounded ml-1 border border-violet-100">
+                                                            <span className="text-[9px] text-violet-600 font-bold bg-violet-50 px-1.5 py-0.5 rounded border border-violet-100 ml-1">
                                                                 {guest.seatNumbers}
                                                             </span>
                                                         )}
-                                                    </p>
+                                                    </div>
                                                 </div>
                                             </div>
                                             <div className="text-right">
@@ -501,7 +578,7 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
                             value={newBooking.phone}
                             onChange={e => setNewBooking({...newBooking, phone: e.target.value})}
                             className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-300"
-                            placeholder="017..."
+                            placeholder="01..."
                           />
                       </div>
                       <div className="space-y-1">

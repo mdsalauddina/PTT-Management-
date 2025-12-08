@@ -1,11 +1,9 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, PersonalData, Guest } from '../types';
 import { db } from '../services/firebase';
 import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
 import { calculatePersonalSettlement, safeNum, recalculateTourSeats } from '../utils/calculations';
-import { Save, PlusCircle, Trash2, Receipt, UserCircle, ChevronDown, Wallet, Users, Phone, Armchair, Settings, Calculator, Tag } from 'lucide-react';
+import { Save, PlusCircle, Trash2, Receipt, UserCircle, ChevronDown, Wallet, Users, Phone, Armchair, Settings, Calculator, Tag, MessageCircle } from 'lucide-react';
 
 const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
   const [selectedTourId, setSelectedTourId] = useState<string>('');
@@ -177,10 +175,16 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
       const calculatedCollection = calculateNewGuestPayable();
       const finalCollection = newGuest.manualCollection ? safeNum(newGuest.manualCollection) : calculatedCollection;
       
+      // Auto-format phone number (Add +88 if starts with 01)
+      let formattedPhone = newGuest.phone.trim();
+      if (formattedPhone.startsWith('01')) {
+          formattedPhone = '+88' + formattedPhone;
+      }
+
       const g: Guest = {
           id: Date.now().toString(),
           name: newGuest.name,
-          phone: newGuest.phone,
+          phone: formattedPhone,
           seatCount: totalSeats,
           seatNumbers: newGuest.seatNumbers,
           unitPrice: 0,
@@ -303,7 +307,7 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
                 {/* Basic Info */}
                 <div className="grid grid-cols-5 gap-2">
                     <input className="col-span-2 p-2 rounded-lg border border-slate-200 text-xs font-bold outline-none focus:border-indigo-400" value={newGuest.name} onChange={e => setNewGuest({...newGuest, name: e.target.value})} placeholder="নাম"/>
-                    <input className="col-span-2 p-2 rounded-lg border border-slate-200 text-xs font-bold outline-none focus:border-indigo-400" value={newGuest.phone} onChange={e => setNewGuest({...newGuest, phone: e.target.value})} placeholder="মোবাইল"/>
+                    <input className="col-span-2 p-2 rounded-lg border border-slate-200 text-xs font-bold outline-none focus:border-indigo-400" value={newGuest.phone} onChange={e => setNewGuest({...newGuest, phone: e.target.value})} placeholder="মোবাইল (01...)"/>
                     <input className="col-span-1 p-2 rounded-lg border border-slate-200 text-xs font-bold outline-none focus:border-indigo-400" value={newGuest.seatNumbers} onChange={e => setNewGuest({...newGuest, seatNumbers: e.target.value})} placeholder="সিট#"/>
                 </div>
                 
@@ -373,7 +377,19 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
                                 <p className="font-bold text-slate-700 text-xs truncate">{g.name}</p>
                             </div>
                             <div className="flex items-center gap-2 ml-5 mb-1.5">
-                                <span className="text-[9px] text-slate-400 font-bold flex items-center gap-0.5"><Phone size={8}/> {g.phone}</span>
+                                {g.phone ? (
+                                    <div className="flex items-center gap-1">
+                                        <a href={`tel:${g.phone}`} className="p-1 bg-emerald-50 text-emerald-600 rounded hover:bg-emerald-100 transition-colors" title="Call">
+                                            <Phone size={10} />
+                                        </a>
+                                        <a href={`https://wa.me/${g.phone.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="p-1 bg-green-50 text-green-600 rounded hover:bg-green-100 transition-colors" title="WhatsApp">
+                                            <MessageCircle size={10} />
+                                        </a>
+                                        <span className="text-[9px] font-bold text-slate-400 ml-1">{g.phone}</span>
+                                    </div>
+                                ) : (
+                                    <span className="text-[9px] text-slate-400 font-bold ml-1">No phone</span>
+                                )}
                                 {g.seatNumbers && <span className="text-[9px] text-violet-500 font-bold bg-violet-50 px-1 rounded flex items-center gap-0.5"><Armchair size={8}/> {g.seatNumbers}</span>}
                             </div>
                             <div className="ml-5 flex gap-2">

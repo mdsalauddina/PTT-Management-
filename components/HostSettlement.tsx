@@ -1,15 +1,16 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { CommonTabProps, PersonalData } from '../types';
+import { CommonTabProps, PersonalData, SettlementStatus } from '../types';
 import { db } from '../services/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { Wallet, ChevronDown, TrendingUp, TrendingDown, Receipt, DollarSign, Building } from 'lucide-react';
+import { collection, query, where, getDocs, doc, updateDoc, Timestamp } from 'firebase/firestore';
+import { Wallet, ChevronDown, TrendingUp, TrendingDown, Receipt, DollarSign, Building, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import { calculateTotalDailyExpenses, calculateTotalOtherFixedCosts, safeNum } from '../utils/calculations';
 
-const HostSettlement: React.FC<CommonTabProps> = ({ user, tours }) => {
+const HostSettlement: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) => {
   const [selectedTourId, setSelectedTourId] = useState<string>('');
   const [personalCollection, setPersonalCollection] = useState<number>(0);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
     if (tours.length > 0 && !selectedTourId) {
@@ -90,6 +91,32 @@ const HostSettlement: React.FC<CommonTabProps> = ({ user, tours }) => {
   // 5. Net Balance
   const netBalance = totalHostCollection - hostSpending;
 
+  // --- ACTIONS ---
+  const handleMarkAsPaid = async () => {
+      if (!activeTour) return;
+      if (!window.confirm("আপনি কি নিশ্চিত যে আপনি পেমেন্ট কমপ্লিট করেছেন?")) return;
+      
+      setIsUpdating(true);
+      try {
+          const tourRef = doc(db, 'tours', activeTour.id);
+          const newStatus: SettlementStatus = 'paid';
+          
+          await updateDoc(tourRef, { 
+              hostSettlementStatus: newStatus,
+              updatedAt: Timestamp.now()
+          });
+          
+          await refreshTours();
+      } catch (e) {
+          console.error("Error updating status", e);
+          alert("আপডেট ব্যর্থ হয়েছে।");
+      } finally {
+          setIsUpdating(false);
+      }
+  };
+
+  const status = activeTour.hostSettlementStatus || 'unpaid';
+
   return (
     <div className="space-y-4 animate-fade-in font-sans pb-24">
       {/* Selector */}
@@ -117,18 +144,53 @@ const HostSettlement: React.FC<CommonTabProps> = ({ user, tours }) => {
          {/* Background Decoration */}
          <div className="absolute -top-20 -right-20 w-48 h-48 bg-white opacity-10 rounded-full blur-3xl"></div>
          
-         <div className="relative z-10 flex justify-between items-center mb-4">
-             <div>
-                 <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-80 mb-1">নেট ব্যালেন্স (Cash In Hand)</p>
-                 <h2 className="text-3xl font-black tracking-tight flex items-baseline gap-1">
-                    {Math.abs(netBalance).toLocaleString()} <span className="text-lg opacity-70">৳</span>
-                 </h2>
-                 <p className="mt-1 text-[10px] font-bold bg-white/20 inline-block px-2 py-0.5 rounded-lg backdrop-blur-md">
-                     {netBalance >= 0 ? 'অ্যাডমিন পাবে' : 'হোস্ট পাবে'}
-                 </p>
+         <div className="relative z-10 flex flex-col gap-4">
+             <div className="flex justify-between items-center">
+                 <div>
+                     <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-80 mb-1">নেট ব্যালেন্স (Cash In Hand)</p>
+                     <h2 className="text-3xl font-black tracking-tight flex items-baseline gap-1">
+                        {Math.abs(netBalance).toLocaleString()} <span className="text-lg opacity-70">৳</span>
+                     </h2>
+                     <p className="mt-1 text-[10px] font-bold bg-white/20 inline-block px-2 py-0.5 rounded-lg backdrop-blur-md">
+                         {netBalance >= 0 ? 'অ্যাডমিন পাবে' : 'হোস্ট পাবে'}
+                     </p>
+                 </div>
+                 <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-md border border-white/10 shadow-lg">
+                     {netBalance >= 0 ? <TrendingUp size={24} /> : <TrendingDown size={24} />}
+                 </div>
              </div>
-             <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-md border border-white/10 shadow-lg">
-                 {netBalance >= 0 ? <TrendingUp size={24} /> : <TrendingDown size={24} />}
+
+             {/* SETTLEMENT ACTION AREA */}
+             <div className="pt-4 border-t border-white/10">
+                 {status === 'settled' ? (
+                     <div className="flex items-center gap-2 bg-emerald-500/20 p-3 rounded-xl border border-emerald-400/30 backdrop-blur-md">
+                         <CheckCircle size={18} className="text-emerald-300" />
+                         <span className="font-bold text-xs text-emerald-100">হিসাব ক্লোজড (Settled)</span>
+                     </div>
+                 ) : status === 'paid' ? (
+                     <div className="flex items-center gap-2 bg-amber-500/20 p-3 rounded-xl border border-amber-400/30 backdrop-blur-md">
+                         <Clock size={18} className="text-amber-300" />
+                         <span className="font-bold text-xs text-amber-100">কনফার্মেশনের অপেক্ষায় (Pending)</span>
+                     </div>
+                 ) : (
+                     <div>
+                         {/* Only show pay button if there is a balance to settle */}
+                         {netBalance !== 0 && (
+                            <button 
+                                onClick={handleMarkAsPaid}
+                                disabled={isUpdating}
+                                className="w-full py-3 bg-white text-slate-900 rounded-xl font-black text-xs uppercase tracking-wider shadow-lg hover:bg-slate-100 active:scale-95 transition-all flex items-center justify-center gap-2"
+                            >
+                                {isUpdating ? 'আপডেট হচ্ছে...' : <><CheckCircle size={16} /> পেমেন্ট কমপ্লিট করুন</>}
+                            </button>
+                         )}
+                         {netBalance === 0 && (
+                             <div className="flex items-center gap-2 text-white/60">
+                                 <CheckCircle size={14}/> <span>কোনো লেনদেন বাকি নেই</span>
+                             </div>
+                         )}
+                     </div>
+                 )}
              </div>
          </div>
       </div>

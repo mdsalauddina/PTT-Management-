@@ -1,17 +1,18 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { CommonTabProps, PartnerAgency, Guest } from '../types';
+import { CommonTabProps, PartnerAgency, Guest, SettlementStatus } from '../types';
 import { db } from '../services/firebase';
 import { doc, updateDoc, Timestamp } from 'firebase/firestore';
 import { calculateAgencySettlement, safeNum, recalculateTourSeats } from '../utils/calculations';
-import { Users, Phone, Plus, Trash, ChevronDown, UserPlus, Briefcase, Mail, Star, Edit3, X, Check, FolderOpen, Armchair } from 'lucide-react';
+import { Users, Phone, Plus, Trash, ChevronDown, UserPlus, Briefcase, Mail, Star, Edit3, X, Check, FolderOpen, Armchair, MessageCircle, Clock, CheckCircle, XCircle } from 'lucide-react';
 
 const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) => {
   const [selectedTourId, setSelectedTourId] = useState<string>('');
   const [showAddAgency, setShowAddAgency] = useState(false);
   const [newAgency, setNewAgency] = useState({ name: '', phone: '', email: '' });
   const [expandedAgency, setExpandedAgency] = useState<string | null>(null);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   const [newBooking, setNewBooking] = useState({ name: '', phone: '', seatCount: '', unitPrice: '', seatNumbers: '' });
   const [isAddingBooking, setIsAddingBooking] = useState<string | null>(null);
@@ -85,10 +86,16 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
 
       const currentGuests = agencies[agencyIndex].guests ? [...agencies[agencyIndex].guests] : [];
       
+      // Auto-format phone number
+      let formattedPhone = (newBooking.phone || '').trim();
+      if (formattedPhone.startsWith('01')) {
+          formattedPhone = '+88' + formattedPhone;
+      }
+
       const newGuest: Guest = {
           id: `g_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           name: newBooking.name,
-          phone: newBooking.phone || '',
+          phone: formattedPhone,
           seatCount: seatCount,
           seatNumbers: newBooking.seatNumbers,
           unitPrice: unitPrice, 
@@ -177,6 +184,28 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
       setEditingGuest(null);
   };
 
+  const updateAgencySettlementStatus = async (agencyId: string, status: SettlementStatus, e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (!window.confirm(`Set status to ${status}?`)) return;
+
+      setIsUpdatingStatus(true);
+      try {
+           const agencies = activeTour.partnerAgencies.map(a => ({
+                ...a,
+                guests: a.guests ? [...a.guests] : []
+            }));
+            const idx = agencies.findIndex(a => a.id === agencyId);
+            if (idx !== -1) {
+                agencies[idx].settlementStatus = status;
+                await updateTourAgencies(agencies);
+            }
+      } catch(err) {
+          console.error(err);
+      } finally {
+          setIsUpdatingStatus(false);
+      }
+  };
+
   return (
     <div className="space-y-4 animate-fade-in max-w-6xl mx-auto font-sans pb-4">
       {/* Selector */}
@@ -242,6 +271,7 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
         {activeTour.partnerAgencies && activeTour.partnerAgencies.map(agency => {
             const settlement = calculateAgencySettlement(activeTour, agency);
             const isExpanded = expandedAgency === agency.id;
+            const status = agency.settlementStatus || 'unpaid';
             
             return (
               <div key={agency.id} className={`bg-white rounded-2xl shadow-sm border overflow-hidden transition-all duration-300 flex flex-col ${isExpanded ? 'border-violet-200 ring-2 ring-violet-50/30 col-span-1 lg:col-span-2 shadow-xl' : 'border-slate-100 hover:shadow-md'}`}>
@@ -254,7 +284,11 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
                               {isExpanded ? <FolderOpen size={18} /> : <Users size={18} />}
                           </div>
                           <div>
-                              <h3 className={`font-black text-sm leading-tight ${isExpanded ? 'text-violet-900' : 'text-slate-800'}`}>{agency.name}</h3>
+                              <div className="flex items-center gap-2">
+                                  <h3 className={`font-black text-sm leading-tight ${isExpanded ? 'text-violet-900' : 'text-slate-800'}`}>{agency.name}</h3>
+                                  {status === 'settled' && <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5"><CheckCircle size={8}/> Paid</span>}
+                                  {status === 'paid' && <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5"><Clock size={8}/> Pending</span>}
+                              </div>
                               {isExpanded && <p className="text-[9px] text-slate-400 font-bold flex items-center mt-0.5"><Mail size={10} className="mr-1"/> {agency.email}</p>}
                           </div>
                       </div>
@@ -285,7 +319,20 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
                                     <p className={`text-[8px] font-bold uppercase mb-1 ${settlement.netAmount >= 0 ? 'text-blue-600' : 'text-rose-600'}`}>
                                         {settlement.netAmount >= 0 ? 'দিবেন' : 'পাবেন'}
                                     </p>
-                                    <p className={`text-lg font-black ${settlement.netAmount >= 0 ? 'text-blue-700' : 'text-rose-700'}`}>৳{Math.abs(settlement.netAmount).toLocaleString()}</p>
+                                    <div className="flex flex-col items-center">
+                                        <p className={`text-lg font-black ${settlement.netAmount >= 0 ? 'text-blue-700' : 'text-rose-700'}`}>৳{Math.abs(settlement.netAmount).toLocaleString()}</p>
+                                        
+                                        {/* Status Actions */}
+                                        {status === 'paid' && (
+                                            <div className="flex gap-2 mt-2">
+                                                <button onClick={(e) => updateAgencySettlementStatus(agency.id, 'unpaid', e)} disabled={isUpdatingStatus} className="p-1 bg-white text-rose-500 rounded border border-rose-200 hover:bg-rose-50 shadow-sm" title="Decline"><XCircle size={14}/></button>
+                                                <button onClick={(e) => updateAgencySettlementStatus(agency.id, 'settled', e)} disabled={isUpdatingStatus} className="p-1 bg-emerald-500 text-white rounded border border-emerald-600 hover:bg-emerald-600 shadow-sm" title="Accept"><CheckCircle size={14}/></button>
+                                            </div>
+                                        )}
+                                        {status === 'settled' && (
+                                            <button onClick={(e) => updateAgencySettlementStatus(agency.id, 'unpaid', e)} disabled={isUpdatingStatus} className="text-[9px] text-slate-400 underline mt-1">Reopen</button>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -308,6 +355,10 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
                                         <div>
                                             <label className="text-[9px] font-bold text-slate-400 uppercase ml-1 block mb-0.5">গেস্ট নাম</label>
                                             <input className="w-full border border-slate-200 bg-white p-2 rounded-lg text-xs outline-none font-bold" placeholder="নাম" value={newBooking.name} onChange={e => setNewBooking({...newBooking, name: e.target.value})} />
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-bold text-slate-400 uppercase ml-1 block mb-0.5">মোবাইল</label>
+                                            <input className="w-full border border-slate-200 bg-white p-2 rounded-lg text-xs outline-none font-bold" placeholder="01..." value={newBooking.phone} onChange={e => setNewBooking({...newBooking, phone: e.target.value})} />
                                         </div>
                                         <div>
                                             <label className="text-[9px] font-bold text-slate-400 uppercase ml-1 block mb-0.5">সিট</label>
@@ -350,6 +401,16 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
                                                     </div>
                                                     
                                                     <div className="flex flex-wrap items-center gap-1.5 ml-7">
+                                                        {guest.phone && (
+                                                            <div className="flex items-center gap-1">
+                                                                <a href={`tel:${guest.phone}`} className="p-1 bg-emerald-50 text-emerald-600 rounded border border-emerald-100 hover:bg-emerald-100 transition-colors" title="Call" onClick={(e) => e.stopPropagation()}>
+                                                                    <Phone size={10}/>
+                                                                </a>
+                                                                <a href={`https://wa.me/${guest.phone.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="p-1 bg-green-50 text-green-600 rounded border border-green-100 hover:bg-green-100 transition-colors" title="WhatsApp" onClick={(e) => e.stopPropagation()}>
+                                                                    <MessageCircle size={10}/>
+                                                                </a>
+                                                            </div>
+                                                        )}
                                                         <span className="text-[9px] text-slate-500 font-bold bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">{guest.seatCount} সিট</span>
                                                         {guest.seatNumbers && (
                                                             <span className="text-[9px] text-violet-600 font-bold bg-violet-50 px-1.5 py-0.5 rounded border border-violet-100 flex items-center gap-0.5">

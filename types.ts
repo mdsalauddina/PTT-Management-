@@ -1,6 +1,7 @@
 
 
 export type UserRole = 'admin' | 'host' | 'agency';
+export type SettlementStatus = 'unpaid' | 'paid' | 'settled';
 
 export interface UserProfile {
   uid: string;
@@ -52,6 +53,7 @@ export interface Guest {
   unitPrice: number; // Per seat collection amount
   collection: number; // Total collection (seatCount * unitPrice)
   seatType: 'regular' | 'disc1' | 'disc2'; // Kept for backward compatibility/default
+  isReceived?: boolean; // New field: true if guest has arrived, false/undefined if pending
   
   // Seat Usage (Determines Cost/Liability)
   paxBreakdown?: {
@@ -81,6 +83,7 @@ export interface PartnerAgency {
   phone: string;
   guests: Guest[];
   expenses: AgencyExpense[];
+  settlementStatus?: SettlementStatus; // New: Track settlement status
 }
 
 export interface Tour {
@@ -95,6 +98,7 @@ export interface Tour {
   costs: TourCosts;
   partnerAgencies: PartnerAgency[];
   totalGuests?: number; // Total number of confirmed guests (Personal + Agency)
+  hostSettlementStatus?: SettlementStatus; // New: Track host-admin settlement status
   createdAt: any;
   updatedAt: any;
 }
