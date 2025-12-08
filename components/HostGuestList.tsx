@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, Guest, PersonalData, PartnerAgency } from '../types';
 import { db } from '../services/firebase';
@@ -103,6 +102,12 @@ const HostGuestList: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) 
       }
   };
 
+  const getWhatsAppLink = (phone: string) => {
+      let p = phone.replace(/[^0-9]/g, '');
+      if (p.startsWith('01')) p = '88' + p;
+      return `https://wa.me/${p}`;
+  };
+
   if (!activeTour) return (
       <div className="h-full flex flex-col items-center justify-center p-10 text-center text-slate-400">
         <Users size={32} className="mb-2 opacity-50"/>
@@ -181,12 +186,12 @@ const HostGuestList: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) 
                                       <h4 className="font-bold text-slate-800 text-sm truncate leading-tight mb-1">{guest.name}</h4>
                                       <div className="flex flex-wrap items-center gap-1.5">
                                           {guest.phone ? (
-                                              <div className="flex items-center gap-1">
-                                                  <a href={`tel:${guest.phone}`} className="text-[9px] text-white font-bold bg-indigo-500 px-2 py-1 rounded-md shadow-sm shadow-indigo-200 hover:bg-indigo-600 transition-all flex items-center gap-1">
-                                                      <Phone size={10}/> কল
+                                              <div className="flex items-center gap-2 mt-1 mb-2">
+                                                  <a href={`tel:${guest.phone}`} className="text-[10px] text-white font-bold bg-indigo-500 px-3 py-1.5 rounded-lg shadow-sm shadow-indigo-200 hover:bg-indigo-600 transition-all flex items-center gap-1.5">
+                                                      <Phone size={12}/> কল
                                                   </a>
-                                                  <a href={`https://wa.me/${guest.phone.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="text-[9px] text-white font-bold bg-green-500 px-2 py-1 rounded-md shadow-sm shadow-green-200 hover:bg-green-600 transition-all flex items-center gap-1">
-                                                      <MessageCircle size={10}/> WA
+                                                  <a href={getWhatsAppLink(guest.phone)} target="_blank" rel="noopener noreferrer" className="text-[10px] text-white font-bold bg-green-500 px-3 py-1.5 rounded-lg shadow-sm shadow-green-200 hover:bg-green-600 transition-all flex items-center gap-1.5">
+                                                      <MessageCircle size={12}/> WA
                                                   </a>
                                               </div>
                                           ) : (

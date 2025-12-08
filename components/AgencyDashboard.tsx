@@ -1,10 +1,9 @@
 
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Tour, UserProfile, Guest, PartnerAgency, SettlementStatus } from '../types';
 import { db } from '../services/firebase';
 import { doc, updateDoc, Timestamp } from 'firebase/firestore';
-import { ChevronDown, LogOut, Users, Plus, Phone, Info, Star, Calendar, History, Wallet, LayoutGrid, Sparkles, Briefcase, Armchair, Tag, Clock, MapPin, X, CheckCircle, Calculator, MessageCircle } from 'lucide-react';
+import { ChevronDown, LogOut, Users, Plus, Phone, Info, Star, Calendar, History, Wallet, LayoutGrid, Sparkles, Briefcase, Armchair, Tag, Clock, MapPin, X, CheckCircle, Calculator, MessageCircle, XCircle } from 'lucide-react';
 import { calculateAgencySettlement, calculateBusFare, calculateTotalOtherFixedCosts, safeNum, recalculateTourSeats } from '../utils/calculations';
 
 interface AgencyDashboardProps {
@@ -209,9 +208,10 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
       }
   };
 
-  const handleMarkPaid = async () => {
+  const updateSettlementStatus = async (status: SettlementStatus) => {
     if (!activeDetailTour || !myAgencyData) return;
-    if (!window.confirm("আপনি কি নিশ্চিত যে পেমেন্ট কমপ্লিট করেছেন?")) return;
+    if (status === 'paid' && !window.confirm("Payment Complete?")) return;
+    if (status === 'settled' && !window.confirm("Accept payment?")) return;
 
     setIsUpdatingStatus(true);
     try {
@@ -219,7 +219,7 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
         const idx = agencies.findIndex((a: PartnerAgency) => a.email === user.email);
         
         if (idx !== -1) {
-            agencies[idx].settlementStatus = 'paid';
+            agencies[idx].settlementStatus = status;
             const tourRef = doc(db, 'tours', activeDetailTour.id);
             await updateDoc(tourRef, { partnerAgencies: agencies, updatedAt: Timestamp.now() });
             await refreshTours();
@@ -232,7 +232,16 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
     }
   };
 
+  const getWhatsAppLink = (phone: string) => {
+      let p = phone.replace(/[^0-9]/g, '');
+      if (p.startsWith('01')) p = '88' + p;
+      return `https://wa.me/${p}`;
+  };
+
   const settlementStatus = myAgencyData?.settlementStatus || 'unpaid';
+  // If Net Amount > 0: Agency Owes Admin (Agency Pays)
+  // If Net Amount < 0: Admin Owes Agency (Agency Receives)
+  const isAgencyPayer = (settlement?.netAmount || 0) >= 0;
 
   return (
     <div className="pb-20 lg:pb-10 min-h-screen flex flex-col bg-slate-50 font-sans text-slate-800">
@@ -454,31 +463,54 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
                                 <CheckCircle size={20} className="text-emerald-600" />
                                 <span className="font-black text-emerald-800 text-xs uppercase tracking-wide">হিসাব ক্লোজড (Settled)</span>
                             </div>
-                        ) : settlementStatus === 'paid' ? (
-                            <div className="bg-amber-100 border border-amber-200 p-4 rounded-xl flex items-center justify-center gap-2">
-                                <Clock size={20} className="text-amber-600" />
-                                <span className="font-black text-amber-800 text-xs uppercase tracking-wide">পেমেন্ট কনফার্মেশনের অপেক্ষায় (Pending)</span>
-                            </div>
                         ) : (
-                            // Only show payment button if money is owed to Admin (netAmount < 0)
-                            // Or if the logic is always clear balance. Usually agency owes admin if they collected less than cost?
-                            // Wait, if Net Settlement is negative, it means (Collection - Cost). 
-                            // If Negative, Agency collected LESS than cost? No.
-                            // Formula: Net = Collection - (Liability + Expenses)
-                            // If Net is POSITIVE: Agency collected MORE than liability. They OWE Admin the surplus.
-                            // If Net is NEGATIVE: Agency collected LESS. Admin OWES Agency (or Agency keeps all and admin pays diff).
-                            // Usually: Agency pays Admin the Net Amount if Positive.
-                            
-                            // Let's assume Agency pays if Net Amount > 0.
-                            settlement.netAmount > 0 && (
-                                <button 
-                                    onClick={handleMarkPaid}
-                                    disabled={isUpdatingStatus}
-                                    className="w-full py-4 bg-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-200 hover:bg-emerald-700 active:scale-95 transition-all font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2"
-                                >
-                                    {isUpdatingStatus ? 'আপডেট হচ্ছে...' : <><CheckCircle size={16}/> পেমেন্ট কমপ্লিট করুন</>}
-                                </button>
-                            )
+                             // Logic:
+                             // Agency Pays (Net >= 0): Show "Mark Paid"
+                             // Agency Receives (Net < 0): Show "Accept / Decline" (if Paid)
+                            <div className="space-y-2">
+                                {isAgencyPayer && (
+                                    settlementStatus === 'paid' ? (
+                                        <div className="bg-amber-100 border border-amber-200 p-4 rounded-xl flex items-center justify-center gap-2">
+                                            <Clock size={20} className="text-amber-600" />
+                                            <span className="font-black text-amber-800 text-xs uppercase tracking-wide">অ্যাডমিন কনফার্মেশনের অপেক্ষায় (Pending)</span>
+                                        </div>
+                                    ) : (
+                                        <button 
+                                            onClick={() => updateSettlementStatus('paid')}
+                                            disabled={isUpdatingStatus}
+                                            className="w-full py-4 bg-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-200 hover:bg-emerald-700 active:scale-95 transition-all font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2"
+                                        >
+                                            {isUpdatingStatus ? 'আপডেট হচ্ছে...' : <><CheckCircle size={16}/> পেমেন্ট কমপ্লিট করুন</>}
+                                        </button>
+                                    )
+                                )}
+
+                                {!isAgencyPayer && (
+                                    settlementStatus === 'paid' ? (
+                                        <div className="flex gap-2">
+                                            <button 
+                                                onClick={() => updateSettlementStatus('unpaid')}
+                                                disabled={isUpdatingStatus}
+                                                className="flex-1 py-3 bg-white text-rose-600 border border-rose-100 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-rose-50 flex items-center justify-center gap-2"
+                                            >
+                                                <XCircle size={16}/> Decline
+                                            </button>
+                                            <button 
+                                                onClick={() => updateSettlementStatus('settled')}
+                                                disabled={isUpdatingStatus}
+                                                className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-black text-xs uppercase tracking-wider shadow-lg hover:bg-emerald-700 flex items-center justify-center gap-2"
+                                            >
+                                                <CheckCircle size={16}/> Accept
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="bg-slate-100 border border-slate-200 p-4 rounded-xl flex items-center justify-center gap-2">
+                                            <Clock size={16} className="text-slate-500" />
+                                            <span className="font-bold text-slate-600 text-xs uppercase">অ্যাডমিন পেমেন্টের অপেক্ষায়...</span>
+                                        </div>
+                                    )
+                                )}
+                            </div>
                         )}
 
                         {/* GUEST LIST */}
@@ -510,16 +542,15 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
                                                 </div>
                                                 <div>
                                                     <p className="font-bold text-slate-800 text-xs">{guest.name}</p>
-                                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                                    <div className="flex items-center gap-2 mt-2">
                                                         {guest.phone ? (
-                                                            <div className="flex items-center gap-1">
-                                                                <a href={`tel:${guest.phone}`} className="p-1 bg-emerald-50 text-emerald-600 rounded border border-emerald-100 hover:bg-emerald-100 transition-colors" title="Call">
-                                                                    <Phone size={10}/>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <a href={`tel:${guest.phone}`} className="text-[10px] text-white font-bold bg-emerald-500 px-3 py-1.5 rounded-lg shadow-sm hover:bg-emerald-600 transition-all flex items-center gap-1.5" title="Call">
+                                                                    <Phone size={12}/> Call
                                                                 </a>
-                                                                <a href={`https://wa.me/${guest.phone.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="p-1 bg-green-50 text-green-600 rounded border border-green-100 hover:bg-green-100 transition-colors" title="WhatsApp">
-                                                                    <MessageCircle size={10}/>
+                                                                <a href={getWhatsAppLink(guest.phone)} target="_blank" rel="noopener noreferrer" className="text-[10px] text-white font-bold bg-green-500 px-3 py-1.5 rounded-lg shadow-sm hover:bg-green-600 transition-all flex items-center gap-1.5" title="WhatsApp">
+                                                                    <MessageCircle size={12}/> WA
                                                                 </a>
-                                                                <span className="text-[9px] text-slate-400 font-bold ml-1">{guest.phone}</span>
                                                             </div>
                                                         ) : (
                                                             <span className="text-[9px] text-slate-400 font-bold ml-1 flex items-center gap-1"><Phone size={8}/> N/A</span>

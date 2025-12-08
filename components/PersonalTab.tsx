@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, PersonalData, Guest } from '../types';
 import { db } from '../services/firebase';
@@ -223,6 +224,12 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
       });
   };
 
+  const getWhatsAppLink = (phone: string) => {
+      let p = phone.replace(/[^0-9]/g, '');
+      if (p.startsWith('01')) p = '88' + p;
+      return `https://wa.me/${p}`;
+  };
+
   if (!activeTour) return <div className="p-10 text-center text-xs text-slate-400">লোড হচ্ছে...</div>;
   const isAdmin = user.role === 'admin';
 
@@ -376,16 +383,15 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
                                 <span className="text-[9px] font-bold text-slate-300 w-3">{i+1}.</span>
                                 <p className="font-bold text-slate-700 text-xs truncate">{g.name}</p>
                             </div>
-                            <div className="flex items-center gap-2 ml-5 mb-1.5">
+                            <div className="flex items-center gap-1.5 ml-5 mb-1.5 mt-1">
                                 {g.phone ? (
-                                    <div className="flex items-center gap-1">
-                                        <a href={`tel:${g.phone}`} className="p-1 bg-emerald-50 text-emerald-600 rounded hover:bg-emerald-100 transition-colors" title="Call">
-                                            <Phone size={10} />
+                                    <div className="flex items-center gap-1.5">
+                                        <a href={`tel:${g.phone}`} className="text-[10px] text-white font-bold bg-emerald-500 px-3 py-1.5 rounded-lg shadow-sm hover:bg-emerald-600 transition-all flex items-center gap-1.5" title="Call">
+                                            <Phone size={12}/> Call
                                         </a>
-                                        <a href={`https://wa.me/${g.phone.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="p-1 bg-green-50 text-green-600 rounded hover:bg-green-100 transition-colors" title="WhatsApp">
-                                            <MessageCircle size={10} />
+                                        <a href={getWhatsAppLink(g.phone)} target="_blank" rel="noopener noreferrer" className="text-[10px] text-white font-bold bg-green-500 px-3 py-1.5 rounded-lg shadow-sm hover:bg-green-600 transition-all flex items-center gap-1.5" title="WhatsApp">
+                                            <MessageCircle size={12}/> WA
                                         </a>
-                                        <span className="text-[9px] font-bold text-slate-400 ml-1">{g.phone}</span>
                                     </div>
                                 ) : (
                                     <span className="text-[9px] text-slate-400 font-bold ml-1">No phone</span>

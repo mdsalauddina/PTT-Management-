@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, PartnerAgency, Guest, SettlementStatus } from '../types';
 import { db } from '../services/firebase';
@@ -186,7 +185,8 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
 
   const updateAgencySettlementStatus = async (agencyId: string, status: SettlementStatus, e: React.MouseEvent) => {
       e.stopPropagation();
-      if (!window.confirm(`Set status to ${status}?`)) return;
+      if (status === 'settled' && !window.confirm("Accept payment?")) return;
+      if (status === 'paid' && !window.confirm("Payment Complete?")) return;
 
       setIsUpdatingStatus(true);
       try {
@@ -204,6 +204,12 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
       } finally {
           setIsUpdatingStatus(false);
       }
+  };
+
+  const getWhatsAppLink = (phone: string) => {
+      let p = phone.replace(/[^0-9]/g, '');
+      if (p.startsWith('01')) p = '88' + p;
+      return `https://wa.me/${p}`;
   };
 
   return (
@@ -273,6 +279,11 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
             const isExpanded = expandedAgency === agency.id;
             const status = agency.settlementStatus || 'unpaid';
             
+            // Logic:
+            // Net > 0: Agency Owes Admin. Admin is Payee.
+            // Net < 0: Admin Owes Agency. Admin is Payer.
+            const isAdminPayer = settlement.netAmount < 0;
+
             return (
               <div key={agency.id} className={`bg-white rounded-2xl shadow-sm border overflow-hidden transition-all duration-300 flex flex-col ${isExpanded ? 'border-violet-200 ring-2 ring-violet-50/30 col-span-1 lg:col-span-2 shadow-xl' : 'border-slate-100 hover:shadow-md'}`}>
                   <div 
@@ -323,12 +334,29 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
                                         <p className={`text-lg font-black ${settlement.netAmount >= 0 ? 'text-blue-700' : 'text-rose-700'}`}>৳{Math.abs(settlement.netAmount).toLocaleString()}</p>
                                         
                                         {/* Status Actions */}
-                                        {status === 'paid' && (
-                                            <div className="flex gap-2 mt-2">
-                                                <button onClick={(e) => updateAgencySettlementStatus(agency.id, 'unpaid', e)} disabled={isUpdatingStatus} className="p-1 bg-white text-rose-500 rounded border border-rose-200 hover:bg-rose-50 shadow-sm" title="Decline"><XCircle size={14}/></button>
-                                                <button onClick={(e) => updateAgencySettlementStatus(agency.id, 'settled', e)} disabled={isUpdatingStatus} className="p-1 bg-emerald-500 text-white rounded border border-emerald-600 hover:bg-emerald-600 shadow-sm" title="Accept"><CheckCircle size={14}/></button>
-                                            </div>
+                                        {/* Admin is Payee (Admin Receives) */}
+                                        {!isAdminPayer && (
+                                            status === 'paid' ? (
+                                                <div className="flex gap-2 mt-2">
+                                                    <button onClick={(e) => updateAgencySettlementStatus(agency.id, 'unpaid', e)} disabled={isUpdatingStatus} className="p-1.5 bg-white text-rose-500 rounded border border-rose-200 hover:bg-rose-50 shadow-sm flex items-center gap-1" title="Decline"><XCircle size={14}/> Decline</button>
+                                                    <button onClick={(e) => updateAgencySettlementStatus(agency.id, 'settled', e)} disabled={isUpdatingStatus} className="p-1.5 bg-emerald-500 text-white rounded border border-emerald-600 hover:bg-emerald-600 shadow-sm flex items-center gap-1" title="Accept"><CheckCircle size={14}/> Accept</button>
+                                                </div>
+                                            ) : (
+                                                status !== 'settled' && <span className="text-[10px] font-bold text-slate-400 mt-2">এজেন্সি পেমেন্টের অপেক্ষায়...</span>
+                                            )
                                         )}
+
+                                        {/* Admin is Payer (Admin Pays) */}
+                                        {isAdminPayer && (
+                                            status === 'paid' ? (
+                                                <span className="text-[10px] font-bold text-amber-500 mt-2 bg-amber-50 px-2 py-0.5 rounded border border-amber-100">কনফার্মেশনের অপেক্ষায়</span>
+                                            ) : status !== 'settled' ? (
+                                                <button onClick={(e) => updateAgencySettlementStatus(agency.id, 'paid', e)} disabled={isUpdatingStatus} className="mt-2 text-[10px] font-bold bg-white text-slate-900 border border-slate-200 px-2 py-1 rounded hover:bg-slate-50 flex items-center gap-1">
+                                                    <CheckCircle size={12}/> Pay Agency
+                                                </button>
+                                            ) : null
+                                        )}
+                                        
                                         {status === 'settled' && (
                                             <button onClick={(e) => updateAgencySettlementStatus(agency.id, 'unpaid', e)} disabled={isUpdatingStatus} className="text-[9px] text-slate-400 underline mt-1">Reopen</button>
                                         )}
@@ -402,12 +430,12 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
                                                     
                                                     <div className="flex flex-wrap items-center gap-1.5 ml-7">
                                                         {guest.phone && (
-                                                            <div className="flex items-center gap-1">
-                                                                <a href={`tel:${guest.phone}`} className="p-1 bg-emerald-50 text-emerald-600 rounded border border-emerald-100 hover:bg-emerald-100 transition-colors" title="Call" onClick={(e) => e.stopPropagation()}>
-                                                                    <Phone size={10}/>
+                                                            <div className="flex items-center gap-1.5 mb-2 mt-1">
+                                                                <a href={`tel:${guest.phone}`} className="text-[10px] text-white font-bold bg-emerald-500 px-3 py-1.5 rounded-lg shadow-sm hover:bg-emerald-600 transition-all flex items-center gap-1.5" title="Call" onClick={(e) => e.stopPropagation()}>
+                                                                    <Phone size={12}/> Call
                                                                 </a>
-                                                                <a href={`https://wa.me/${guest.phone.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="p-1 bg-green-50 text-green-600 rounded border border-green-100 hover:bg-green-100 transition-colors" title="WhatsApp" onClick={(e) => e.stopPropagation()}>
-                                                                    <MessageCircle size={10}/>
+                                                                <a href={getWhatsAppLink(guest.phone)} target="_blank" rel="noopener noreferrer" className="text-[10px] text-white font-bold bg-green-500 px-3 py-1.5 rounded-lg shadow-sm hover:bg-green-600 transition-all flex items-center gap-1.5" title="WhatsApp" onClick={(e) => e.stopPropagation()}>
+                                                                    <MessageCircle size={12}/> WA
                                                                 </a>
                                                             </div>
                                                         )}

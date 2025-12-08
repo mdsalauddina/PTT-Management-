@@ -1,10 +1,9 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, PersonalData, SettlementStatus } from '../types';
 import { db } from '../services/firebase';
 import { collection, query, where, getDocs, doc, updateDoc, Timestamp } from 'firebase/firestore';
-import { Wallet, ChevronDown, TrendingUp, TrendingDown, Receipt, DollarSign, Building, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { Wallet, ChevronDown, TrendingUp, TrendingDown, Receipt, DollarSign, Building, CheckCircle, Clock, XCircle, AlertCircle } from 'lucide-react';
 import { calculateTotalDailyExpenses, calculateTotalOtherFixedCosts, safeNum } from '../utils/calculations';
 
 const HostSettlement: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) => {
@@ -24,7 +23,6 @@ const HostSettlement: React.FC<CommonTabProps> = ({ user, tours, refreshTours })
     if (!activeTour) return;
     const fetchAggregatedPersonalData = async () => {
       try {
-        // Query all personal data documents for this tour (created by Admin or Host)
         const q = query(collection(db, 'personal'), where('tourId', '==', activeTour.id));
         const snapshot = await getDocs(q);
         
@@ -32,15 +30,10 @@ const HostSettlement: React.FC<CommonTabProps> = ({ user, tours, refreshTours })
         
         snapshot.forEach((doc) => {
             const data = doc.data() as PersonalData;
-            
-            // Add Booking Fee
             totalCollection += safeNum(data.bookingFee);
-            
-            // Add Guest Collections
             if (data.guests && data.guests.length > 0) {
                 totalCollection += data.guests.reduce((sum, g) => sum + safeNum(g.collection), 0);
             } else {
-                // Fallback for older data structure without guest array
                 const reg = safeNum(data.personalStandardCount) * safeNum(activeTour.fees?.regular);
                 const d1 = safeNum(data.personalDisc1Count) * safeNum(activeTour.fees?.disc1);
                 const d2 = safeNum(data.personalDisc2Count) * safeNum(activeTour.fees?.disc2);
@@ -65,12 +58,6 @@ const HostSettlement: React.FC<CommonTabProps> = ({ user, tours, refreshTours })
       </div>
   );
 
-  // --- CALCULATION LOGIC ---
-
-  // 1. Personal Collection (Calculated in useEffect)
-  // Used state variable `personalCollection`
-
-  // 2. Agency Collection
   let agencyCollection = 0;
   if (activeTour.partnerAgencies) {
       agencyCollection = activeTour.partnerAgencies.reduce((sum, agency) => {
@@ -79,33 +66,26 @@ const HostSettlement: React.FC<CommonTabProps> = ({ user, tours, refreshTours })
       }, 0);
   }
 
-  // 3. Total Host Collection (Personal + Agency)
   const totalHostCollection = personalCollection + agencyCollection;
-
-  // 4. Host Spending (Credit): Daily Expenses + Extra Fixed Costs
   const dailyExpensesTotal = calculateTotalDailyExpenses(activeTour);
   const otherFixedCostsTotal = calculateTotalOtherFixedCosts(activeTour);
-  
   const hostSpending = dailyExpensesTotal + otherFixedCostsTotal;
-
-  // 5. Net Balance
   const netBalance = totalHostCollection - hostSpending;
+  const status = activeTour.hostSettlementStatus || 'unpaid';
 
   // --- ACTIONS ---
-  const handleMarkAsPaid = async () => {
+  const updateStatus = async (newStatus: SettlementStatus) => {
       if (!activeTour) return;
-      if (!window.confirm("আপনি কি নিশ্চিত যে আপনি পেমেন্ট কমপ্লিট করেছেন?")) return;
+      if (newStatus === 'paid' && !window.confirm("আপনি কি নিশ্চিত যে পেমেন্ট কমপ্লিট করেছেন?")) return;
+      if (newStatus === 'settled' && !window.confirm("পেমেন্ট গ্রহণ নিশ্চিত করছেন?")) return;
       
       setIsUpdating(true);
       try {
           const tourRef = doc(db, 'tours', activeTour.id);
-          const newStatus: SettlementStatus = 'paid';
-          
           await updateDoc(tourRef, { 
               hostSettlementStatus: newStatus,
               updatedAt: Timestamp.now()
           });
-          
           await refreshTours();
       } catch (e) {
           console.error("Error updating status", e);
@@ -115,7 +95,10 @@ const HostSettlement: React.FC<CommonTabProps> = ({ user, tours, refreshTours })
       }
   };
 
-  const status = activeTour.hostSettlementStatus || 'unpaid';
+  // Logic: 
+  // Net > 0: Host Owes Admin. Host is Payer.
+  // Net < 0: Admin Owes Host. Host is Payee.
+  const isPayer = netBalance > 0;
 
   return (
     <div className="space-y-4 animate-fade-in font-sans pb-24">
@@ -141,7 +124,6 @@ const HostSettlement: React.FC<CommonTabProps> = ({ user, tours, refreshTours })
 
       {/* Main Settlement Card */}
       <div className={`relative overflow-hidden rounded-[2rem] p-6 text-white shadow-2xl transition-all duration-500 ${netBalance >= 0 ? 'bg-gradient-to-br from-blue-600 to-indigo-800 shadow-blue-900/20' : 'bg-gradient-to-br from-rose-600 to-orange-800 shadow-rose-900/20'}`}>
-         {/* Background Decoration */}
          <div className="absolute -top-20 -right-20 w-48 h-48 bg-white opacity-10 rounded-full blur-3xl"></div>
          
          <div className="relative z-10 flex flex-col gap-4">
@@ -167,29 +149,59 @@ const HostSettlement: React.FC<CommonTabProps> = ({ user, tours, refreshTours })
                          <CheckCircle size={18} className="text-emerald-300" />
                          <span className="font-bold text-xs text-emerald-100">হিসাব ক্লোজড (Settled)</span>
                      </div>
-                 ) : status === 'paid' ? (
-                     <div className="flex items-center gap-2 bg-amber-500/20 p-3 rounded-xl border border-amber-400/30 backdrop-blur-md">
-                         <Clock size={18} className="text-amber-300" />
-                         <span className="font-bold text-xs text-amber-100">কনফার্মেশনের অপেক্ষায় (Pending)</span>
-                     </div>
                  ) : (
-                     <div>
-                         {/* Only show pay button if there is a balance to settle */}
-                         {netBalance !== 0 && (
-                            <button 
-                                onClick={handleMarkAsPaid}
-                                disabled={isUpdating}
-                                className="w-full py-3 bg-white text-slate-900 rounded-xl font-black text-xs uppercase tracking-wider shadow-lg hover:bg-slate-100 active:scale-95 transition-all flex items-center justify-center gap-2"
-                            >
-                                {isUpdating ? 'আপডেট হচ্ছে...' : <><CheckCircle size={16} /> পেমেন্ট কমপ্লিট করুন</>}
-                            </button>
+                    <div>
+                         {/* If Host is Payer (Host Owes Admin) */}
+                         {isPayer && (
+                             status === 'paid' ? (
+                                <div className="flex items-center gap-2 bg-amber-500/20 p-3 rounded-xl border border-amber-400/30 backdrop-blur-md">
+                                    <Clock size={18} className="text-amber-300" />
+                                    <span className="font-bold text-xs text-amber-100">অ্যাডমিন কনফার্মেশনের অপেক্ষায় (Pending)</span>
+                                </div>
+                             ) : (
+                                <button 
+                                    onClick={() => updateStatus('paid')}
+                                    disabled={isUpdating}
+                                    className="w-full py-3 bg-white text-slate-900 rounded-xl font-black text-xs uppercase tracking-wider shadow-lg hover:bg-slate-100 active:scale-95 transition-all flex items-center justify-center gap-2"
+                                >
+                                    {isUpdating ? '...' : <><CheckCircle size={16} /> পেমেন্ট কমপ্লিট করুন</>}
+                                </button>
+                             )
                          )}
+
+                         {/* If Host is Payee (Admin Owes Host) */}
+                         {!isPayer && (
+                             status === 'paid' ? (
+                                 <div className="flex gap-2">
+                                     <button 
+                                         onClick={() => updateStatus('unpaid')}
+                                         disabled={isUpdating}
+                                         className="flex-1 py-3 bg-white/20 text-white border border-white/20 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-white/30 flex items-center justify-center gap-2"
+                                     >
+                                         <XCircle size={16}/> Decline
+                                     </button>
+                                     <button 
+                                         onClick={() => updateStatus('settled')}
+                                         disabled={isUpdating}
+                                         className="flex-1 py-3 bg-white text-slate-900 rounded-xl font-black text-xs uppercase tracking-wider shadow-lg hover:bg-slate-100 flex items-center justify-center gap-2"
+                                     >
+                                         <CheckCircle size={16}/> Accept
+                                     </button>
+                                 </div>
+                             ) : (
+                                <div className="flex items-center gap-2 bg-white/10 p-3 rounded-xl border border-white/10 backdrop-blur-md">
+                                    <Clock size={18} className="text-white/70" />
+                                    <span className="font-bold text-xs text-white/80">অ্যাডমিন পেমেন্টের অপেক্ষায়</span>
+                                </div>
+                             )
+                         )}
+                         
                          {netBalance === 0 && (
                              <div className="flex items-center gap-2 text-white/60">
                                  <CheckCircle size={14}/> <span>কোনো লেনদেন বাকি নেই</span>
                              </div>
                          )}
-                     </div>
+                    </div>
                  )}
              </div>
          </div>

@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, PersonalData, SettlementStatus } from '../types';
 import { db } from '../services/firebase';
@@ -100,7 +99,8 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
 
   const updateHostSettlementStatus = async (status: SettlementStatus) => {
       if (!activeTour) return;
-      if (!window.confirm(`Are you sure you want to set status to ${status}?`)) return;
+      if (status === 'paid' && !window.confirm(`Payment Complete?`)) return;
+      if (status === 'settled' && !window.confirm(`Accept payment?`)) return;
 
       setIsUpdatingStatus(true);
       try {
@@ -178,17 +178,17 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
   const hostSettlementBalance = hostCollection - hostSpending;
   const hostStatus = activeTour.hostSettlementStatus || 'unpaid';
 
+  // Logic: 
+  // Net > 0: Host Owes Admin. Admin is Payee.
+  // Net < 0: Admin Owes Host. Admin is Payer.
+  const isAdminPayer = hostSettlementBalance < 0;
+
   // Per Head Logic:
-  // Variable costs -> divide by Total Guests (totalBooked)
-  // Fixed Bus Rent -> divide by Total Seats (Capacity)
   const variableDivisor = totalBooked > 0 ? totalBooked : 1;
   const calcPerHeadVariable = (amount: number) => Math.ceil(amount / variableDivisor);
   const calcPerHeadBus = (amount: number) => Math.ceil(amount / (totalSeats > 0 ? totalSeats : 1));
-
-  // Use updated calculation shared utility for Cost Per Seat
   const costPerSeat = calculateBuyRates(activeTour);
   const busFares = calculateBusFare(activeTour.busConfig);
-  const sharedCostPerHead = costPerSeat.regular - busFares.regularFare; // Roughly accurate for display
 
   const seatData = [
     { name: 'বুকড', value: totalBooked, color: '#6366f1' },
@@ -284,10 +284,10 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
                               <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 flex items-center gap-1"><CheckCircle size={10}/> ক্লোজড</span>
                           )}
                           {hostStatus === 'paid' && (
-                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 flex items-center gap-1"><Clock size={10}/> পেন্ডিং কনফার্মেশন</span>
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 flex items-center gap-1"><Clock size={10}/> পেন্ডিং</span>
                           )}
                           {hostStatus === 'unpaid' && (
-                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 flex items-center gap-1">বাকি আছে</span>
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 flex items-center gap-1">বাকি</span>
                           )}
                       </div>
                       <p className="text-[10px] font-bold text-slate-500">
@@ -306,34 +306,53 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
           </div>
           
           {/* Admin Action Buttons */}
-          {user.role === 'admin' && (hostStatus === 'paid' || hostStatus === 'settled') && (
+          {user.role === 'admin' && (
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-200/50">
-                  {hostStatus === 'paid' && (
-                      <>
-                        <button 
-                            disabled={isUpdatingStatus}
-                            onClick={() => updateHostSettlementStatus('unpaid')}
-                            className="px-3 py-2 bg-white text-rose-600 text-[10px] font-bold uppercase tracking-wider rounded-xl shadow-sm border border-rose-100 hover:bg-rose-50 flex items-center gap-1.5"
-                        >
-                           <XCircle size={14} /> ডিক্লাইন
-                        </button>
-                        <button 
-                            disabled={isUpdatingStatus}
-                            onClick={() => updateHostSettlementStatus('settled')}
-                            className="px-4 py-2 bg-emerald-600 text-white text-[10px] font-bold uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-200 hover:bg-emerald-700 flex items-center gap-1.5"
-                        >
-                           <CheckCircle size={14} /> এক্সেপ্ট (Accept)
-                        </button>
-                      </>
+                  {/* If Admin is Payee (Admin Receives) */}
+                  {!isAdminPayer && (
+                      hostStatus === 'paid' ? (
+                        <>
+                            <button 
+                                disabled={isUpdatingStatus}
+                                onClick={() => updateHostSettlementStatus('unpaid')}
+                                className="px-3 py-2 bg-white text-rose-600 text-[10px] font-bold uppercase tracking-wider rounded-xl shadow-sm border border-rose-100 hover:bg-rose-50 flex items-center gap-1.5"
+                            >
+                            <XCircle size={14} /> Decline
+                            </button>
+                            <button 
+                                disabled={isUpdatingStatus}
+                                onClick={() => updateHostSettlementStatus('settled')}
+                                className="px-4 py-2 bg-emerald-600 text-white text-[10px] font-bold uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-200 hover:bg-emerald-700 flex items-center gap-1.5"
+                            >
+                            <CheckCircle size={14} /> Accept
+                            </button>
+                        </>
+                      ) : (
+                         hostStatus !== 'settled' && <span className="text-xs font-bold text-slate-400 italic">হোস্ট পেমেন্টের অপেক্ষায়...</span>
+                      )
                   )}
-                  {hostStatus === 'settled' && (
-                       <button 
-                            disabled={isUpdatingStatus}
-                            onClick={() => updateHostSettlementStatus('unpaid')}
-                            className="px-3 py-1.5 bg-white/50 text-slate-500 text-[10px] font-bold rounded-lg border border-slate-200 hover:bg-white hover:text-rose-600 hover:border-rose-200 transition-colors"
-                       >
-                           Reopen
-                       </button>
+
+                  {/* If Admin is Payer (Admin Pays) */}
+                  {isAdminPayer && (
+                      hostStatus === 'paid' ? (
+                          <div className="px-3 py-2 bg-amber-50 text-amber-600 text-[10px] font-bold uppercase tracking-wider rounded-xl border border-amber-100 flex items-center gap-1.5">
+                              <Clock size={14} /> হোস্ট কনফার্মেশনের অপেক্ষায়
+                          </div>
+                      ) : hostStatus === 'settled' ? (
+                           <button onClick={() => updateHostSettlementStatus('unpaid')} className="text-[10px] text-slate-400 underline">Reopen</button>
+                      ) : (
+                          <button 
+                                disabled={isUpdatingStatus}
+                                onClick={() => updateHostSettlementStatus('paid')}
+                                className="px-4 py-2 bg-white text-slate-900 text-[10px] font-bold uppercase tracking-wider rounded-xl shadow-md border border-slate-100 hover:bg-slate-50 flex items-center gap-1.5"
+                          >
+                             <CheckCircle size={14} /> পেমেন্ট কমপ্লিট করুন
+                          </button>
+                      )
+                  )}
+
+                  {hostStatus === 'settled' && !isAdminPayer && (
+                       <button onClick={() => updateHostSettlementStatus('unpaid')} className="text-[10px] text-slate-400 underline">Reopen</button>
                   )}
               </div>
           )}
