@@ -81,7 +81,7 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
       if (agencyIndex === -1) return;
 
       const seatCount = parseInt(newBooking.seatCount) || 0;
-      const unitPrice = parseInt(newBooking.unitPrice) || 0;
+      const totalAmount = parseInt(newBooking.unitPrice) || 0; // Treated as fixed Total Collection
 
       const currentGuests = agencies[agencyIndex].guests ? [...agencies[agencyIndex].guests] : [];
       
@@ -97,8 +97,8 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
           phone: formattedPhone,
           seatCount: seatCount,
           seatNumbers: newBooking.seatNumbers,
-          unitPrice: unitPrice, 
-          collection: seatCount * unitPrice, 
+          unitPrice: seatCount > 0 ? Math.round(totalAmount / seatCount) : 0, 
+          collection: totalAmount, // Fixed amount (not multiplied)
           seatType: 'regular',
           paxBreakdown: {
               regular: seatCount,

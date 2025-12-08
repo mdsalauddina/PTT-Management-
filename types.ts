@@ -96,6 +96,7 @@ export interface Tour {
   fees: TourFees;
   busConfig: BusConfig;
   costs: TourCosts;
+  penaltyAmount?: number; // New: Per-person penalty for non-received guests
   partnerAgencies: PartnerAgency[];
   totalGuests?: number; // Total number of confirmed guests (Personal + Agency)
   hostSettlementStatus?: SettlementStatus; // New: Track host-admin settlement status

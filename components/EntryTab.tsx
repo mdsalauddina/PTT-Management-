@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../services/firebase';
 import { collection, addDoc, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { Tour, CommonTabProps, BusConfig, DailyExpense } from '../types';
-import { Plus, Edit2, DollarSign, Bus, Settings, MapPin, Save, ArrowLeft, Trash2, Clock, Utensils, UserPlus, User, Loader, Building, ChevronDown, PlusCircle } from 'lucide-react';
+import { Plus, Edit2, DollarSign, Bus, Settings, MapPin, Save, ArrowLeft, Trash2, Clock, Utensils, UserPlus, User, Loader, Building, ChevronDown, PlusCircle, AlertTriangle } from 'lucide-react';
 import { calculateBusFare } from '../utils/calculations';
 
 // UI Helpers - Compact & Refined
@@ -52,6 +52,7 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
     date: '',
     duration: 1,
     assignedHostId: '',
+    penaltyAmount: 500, // Default penalty
     fees: { regular: 1200, disc1: 1100, disc2: 1000 },
     busConfig: {
       totalRent: 0,
@@ -358,6 +359,11 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
                                   <User size={10} /> {assignedHostEmail.split('@')[0]}
                               </span>
                           )}
+                          {tour.penaltyAmount && tour.penaltyAmount > 0 && (
+                             <span className="flex items-center gap-1 bg-rose-50 text-rose-600 px-2 py-1.5 rounded-lg border border-rose-100">
+                                  <AlertTriangle size={10} /> জরিমানা: {tour.penaltyAmount}
+                             </span>
+                          )}
                       </div>
 
                       {isAdmin && (
@@ -470,6 +476,11 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
                             <InputGroup label="ডিস ২">
                                 <StyledInput type="number" className="text-center font-bold text-orange-600 bg-orange-50/50" value={tourData.fees?.disc2} onChange={(e: any) => setTourData({...tourData, fees: {...tourData.fees!, disc2: safeNumInput(e)}})} />
                             </InputGroup>
+                        </div>
+                        <div className="mt-4 pt-3 border-t border-slate-100">
+                           <InputGroup label="জরিমানা (অনুপস্থিত গেস্ট)">
+                                <StyledInput type="number" className="text-center font-bold text-rose-600 bg-rose-50/50" value={tourData.penaltyAmount} onChange={(e: any) => setTourData({...tourData, penaltyAmount: safeNumInput(e)})} />
+                           </InputGroup>
                         </div>
                     </Card>
                 </div>

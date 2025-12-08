@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, PersonalData, SettlementStatus } from '../types';
 import { db } from '../services/firebase';
@@ -32,8 +33,16 @@ const HostSettlement: React.FC<CommonTabProps> = ({ user, tours, refreshTours })
             const data = doc.data() as PersonalData;
             totalCollection += safeNum(data.bookingFee);
             if (data.guests && data.guests.length > 0) {
-                totalCollection += data.guests.reduce((sum, g) => sum + safeNum(g.collection), 0);
+                data.guests.forEach(g => {
+                   // Host Settlement Logic: 
+                   // Only count collection if guest is RECEIVED. 
+                   // Ignore absent guests (Penalty is not handled by Host in this settlement).
+                   if (g.isReceived) {
+                       totalCollection += safeNum(g.collection);
+                   }
+                });
             } else {
+                // Legacy data assumption (all received)
                 const reg = safeNum(data.personalStandardCount) * safeNum(activeTour.fees?.regular);
                 const d1 = safeNum(data.personalDisc1Count) * safeNum(activeTour.fees?.disc1);
                 const d2 = safeNum(data.personalDisc2Count) * safeNum(activeTour.fees?.disc2);
@@ -61,7 +70,10 @@ const HostSettlement: React.FC<CommonTabProps> = ({ user, tours, refreshTours })
   let agencyCollection = 0;
   if (activeTour.partnerAgencies) {
       agencyCollection = activeTour.partnerAgencies.reduce((sum, agency) => {
-          const agencyTotal = agency.guests ? agency.guests.reduce((gSum, g) => gSum + safeNum(g.collection), 0) : 0;
+          const agencyTotal = agency.guests ? agency.guests.reduce((gSum, g) => {
+              // Only count received guests for Host Collection
+              return g.isReceived ? gSum + safeNum(g.collection) : gSum;
+          }, 0) : 0;
           return sum + agencyTotal;
       }, 0);
   }
@@ -215,7 +227,7 @@ const HostSettlement: React.FC<CommonTabProps> = ({ user, tours, refreshTours })
                       <div className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg">
                           <DollarSign size={14}/>
                       </div>
-                      <h3 className="font-bold text-slate-700 text-[10px] uppercase tracking-widest">মোট কালেকশন</h3>
+                      <h3 className="font-bold text-slate-700 text-[10px] uppercase tracking-widest">মোট কালেকশন (Received Only)</h3>
                   </div>
                   <div className="space-y-2">
                       <div className="flex justify-between items-center text-xs p-2 bg-slate-50 rounded-xl">

@@ -107,6 +107,7 @@ export const calculateAgencySettlement = (tour: Tour, agency: PartnerAgency) => 
   const agencyGuestCount = agency.guests.reduce((sum, guest) => sum + getGuestSeatCount(guest), 0);
   
   const rates = calculateBuyRates(tour);
+  const penaltyAmount = safeNum(tour.penaltyAmount) || 500; // Use tour defined penalty or default 500
 
   let totalLiability = 0;
   let totalCollection = 0;
@@ -131,10 +132,12 @@ export const calculateAgencySettlement = (tour: Tour, agency: PartnerAgency) => 
               else totalLiability += seats * rates.regular;
           }
       } else {
-          // If NOT Received: Penalty Logic (500 Taka per seat)
-          const penalty = seats * 500;
+          // If NOT Received: Penalty Logic (Dynamic Amount)
+          // Agency owes the fine (Collection increases). 
+          // They DO NOT incur the seat cost (Liability stays 0 for this guest).
+          // Result: Net = Collection (Penalty) - Liability (0) = Penalty Payable.
+          const penalty = seats * penaltyAmount;
           totalCollection += penalty; 
-          totalLiability += penalty; // Liability is just the fine they owe
       }
   });
   
@@ -171,6 +174,8 @@ export const calculatePersonalSettlement = (tour: Tour, personalData: PersonalDa
     const d1Fee = baseFee - d1Amount;
     const d2Fee = baseFee - d2Amount;
 
+    const penaltyAmount = safeNum(tour.penaltyAmount) || 500; // Use tour defined penalty or default 500
+
     let totalPersonalIncome = bookingFee;
     let totalPersonalCost = 0;
 
@@ -202,15 +207,14 @@ export const calculatePersonalSettlement = (tour: Tour, personalData: PersonalDa
                  }
              } else {
                  // Penalty Logic for Personal Guests too
-                 const penalty = seats * 500;
-                 totalPersonalIncome += penalty; // We collected the fine
-                 totalPersonalCost += penalty;   // It counts as a cost to balance or just revenue? 
-                 // Actually for personal, if admin is handling, income is fine, cost is liability.
-                 // Net Result = 0 for this guest. The 500 helps the main fund.
+                 // We pay 'penaltyAmount' per seat. This adds to the pot (Income).
+                 // No cost associated with it as the seat is effectively empty/fine based.
+                 const penalty = seats * penaltyAmount;
+                 totalPersonalIncome += penalty; 
              }
         });
     } else {
-        // Fallback counters (Assume received for legacy)
+        // Fallback for old data - assume received
         const regCount = safeNum(personalData.personalStandardCount);
         const d1Count = safeNum(personalData.personalDisc1Count);
         const d2Count = safeNum(personalData.personalDisc2Count);
