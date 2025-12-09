@@ -56,6 +56,7 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
     fees: { regular: 1200, disc1: 1100, disc2: 1000 },
     busConfig: {
       totalRent: 0,
+      adminPaidRent: 0,
       totalSeats: 40,
       regularSeats: 40, // Default to all regular
       discount1Seats: 0,
@@ -271,6 +272,8 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
   const isAdmin = user.role === 'admin';
   // Allow host to see Right Column for expense input
   const isHost = user.role === 'host'; 
+  
+  const hostPayableRent = (tourData.busConfig?.totalRent || 0) - (tourData.busConfig?.adminPaidRent || 0);
 
   return (
     <div className="animate-fade-in font-sans text-slate-800">
@@ -492,17 +495,23 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
                     <Card className="p-4">
                         <SectionHeader icon={Building} title="ফিক্সড খরচ (মূল)" color="text-rose-700" />
                         <div className="grid grid-cols-2 gap-3 mb-4">
-                            <InputGroup label="মোট বাস">
+                            <InputGroup label="মোট বাস ভাড়া">
                                 <StyledInput type="number" className="font-bold text-rose-600 bg-rose-50/30" value={tourData.busConfig?.totalRent} onChange={(e: any) => setTourData({...tourData, busConfig: {...tourData.busConfig!, totalRent: safeNumInput(e)}})} />
                             </InputGroup>
+                            <InputGroup label="অ্যাডমিন পে করেছে">
+                                <StyledInput type="number" className="font-bold text-emerald-600 bg-emerald-50/30" placeholder="0" value={tourData.busConfig?.adminPaidRent} onChange={(e: any) => setTourData({...tourData, busConfig: {...tourData.busConfig!, adminPaidRent: safeNumInput(e)}})} />
+                            </InputGroup>
+                            
+                            <div className="col-span-2 text-[10px] font-bold text-slate-400 text-center pb-2">
+                                হোস্ট দিবে: <span className="text-slate-600">৳{hostPayableRent.toLocaleString()}</span> (কালেকশন থেকে)
+                            </div>
+
                             <InputGroup label="মোট হোটেল">
                                 <StyledInput type="number" className="font-bold text-rose-600 bg-rose-50/30" value={tourData.costs?.hotelCost} onChange={(e: any) => setTourData({...tourData, costs: {...tourData.costs!, hotelCost: safeNumInput(e)}})} />
                             </InputGroup>
-                            <div className="col-span-2">
-                                <InputGroup label="হোস্ট স্যালারি">
-                                    <StyledInput type="number" value={tourData.costs?.hostFee} onChange={(e: any) => setTourData({...tourData, costs: {...tourData.costs!, hostFee: safeNumInput(e)}})} />
-                                </InputGroup>
-                            </div>
+                            <InputGroup label="হোস্ট স্যালারি">
+                                <StyledInput type="number" value={tourData.costs?.hostFee} onChange={(e: any) => setTourData({...tourData, costs: {...tourData.costs!, hostFee: safeNumInput(e)}})} />
+                            </InputGroup>
                         </div>
                         
                         <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">

@@ -13,6 +13,7 @@ export interface UserProfile {
 
 export interface BusConfig {
   totalRent: number;
+  adminPaidRent?: number; // Amount paid by Admin directly
   totalSeats: number;
   regularSeats: number;
   discount1Seats: number;

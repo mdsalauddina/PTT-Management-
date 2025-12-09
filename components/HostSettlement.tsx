@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { CommonTabProps, PersonalData, SettlementStatus } from '../types';
 import { db } from '../services/firebase';
 import { collection, query, where, getDocs, doc, updateDoc, Timestamp } from 'firebase/firestore';
-import { Wallet, ChevronDown, TrendingUp, TrendingDown, Receipt, DollarSign, Building, CheckCircle, Clock, XCircle, AlertCircle } from 'lucide-react';
+import { Wallet, ChevronDown, TrendingUp, TrendingDown, Receipt, DollarSign, Building, CheckCircle, Clock, XCircle, AlertCircle, Bus } from 'lucide-react';
 import { calculateTotalDailyExpenses, calculateTotalOtherFixedCosts, safeNum } from '../utils/calculations';
 
 const HostSettlement: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) => {
@@ -81,7 +81,13 @@ const HostSettlement: React.FC<CommonTabProps> = ({ user, tours, refreshTours })
   const totalHostCollection = personalCollection + agencyCollection;
   const dailyExpensesTotal = calculateTotalDailyExpenses(activeTour);
   const otherFixedCostsTotal = calculateTotalOtherFixedCosts(activeTour);
-  const hostSpending = dailyExpensesTotal + otherFixedCostsTotal;
+  
+  // Calculate Host's share of Bus Rent
+  const totalBusRent = safeNum(activeTour.busConfig?.totalRent);
+  const adminPaidRent = safeNum(activeTour.busConfig?.adminPaidRent);
+  const hostBusShare = Math.max(0, totalBusRent - adminPaidRent);
+
+  const hostSpending = dailyExpensesTotal + otherFixedCostsTotal + hostBusShare;
   const netBalance = totalHostCollection - hostSpending;
   const status = activeTour.hostSettlementStatus || 'unpaid';
 
@@ -263,6 +269,14 @@ const HostSettlement: React.FC<CommonTabProps> = ({ user, tours, refreshTours })
                       <div className="flex justify-between items-center text-xs p-2 bg-slate-50 rounded-xl">
                           <span className="font-bold text-slate-500">অন্যান্য ফিক্সড</span>
                           <span className="font-bold text-slate-800">৳{otherFixedCostsTotal.toLocaleString()}</span>
+                      </div>
+                      {/* Host Paid Bus Share */}
+                      <div className="flex justify-between items-center text-xs p-2 bg-violet-50 rounded-xl border border-violet-100">
+                          <span className="font-bold text-violet-500 flex items-center gap-1"><Bus size={12}/> বাস ভাড়া (হোস্ট)</span>
+                          <div className="text-right">
+                              <span className="font-bold text-violet-700 block">৳{hostBusShare.toLocaleString()}</span>
+                              {adminPaidRent > 0 && <span className="text-[8px] font-bold text-violet-400 block">(অ্যাডমিন দিল: ৳{adminPaidRent})</span>}
+                          </div>
                       </div>
                   </div>
               </div>

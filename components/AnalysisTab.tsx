@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, PersonalData, SettlementStatus } from '../types';
 import { db } from '../services/firebase';
@@ -70,7 +71,10 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
              const data = doc.data() as PersonalData;
              totalPersonalCol += safeNum(data.bookingFee);
              if (data.guests) {
-                 totalPersonalCol += data.guests.reduce((sum, g) => sum + safeNum(g.collection), 0);
+                 totalPersonalCol += data.guests.reduce((sum, g) => {
+                     // Host Settlement Logic: Count only received
+                     return g.isReceived ? sum + safeNum(g.collection) : sum;
+                 }, 0);
              } else {
                  const reg = safeNum(data.personalStandardCount) * safeNum(activeTour.fees?.regular);
                  const d1 = safeNum(data.personalDisc1Count) * safeNum(activeTour.fees?.disc1);
@@ -83,7 +87,9 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
         let totalAgencyCol = 0;
         if (activeTour.partnerAgencies) {
             totalAgencyCol = activeTour.partnerAgencies.reduce((sum, ag) => {
-                 return sum + (ag.guests ? ag.guests.reduce((gSum, g) => gSum + safeNum(g.collection), 0) : 0);
+                 return sum + (ag.guests ? ag.guests.reduce((gSum, g) => {
+                     return g.isReceived ? gSum + safeNum(g.collection) : gSum;
+                 }, 0) : 0);
             }, 0);
         }
 
@@ -145,6 +151,8 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
   const occupancyRate = totalSeats > 0 ? Math.min((totalBooked / totalSeats) * 100, 100) : 0;
   const vacantSeats = Math.max(0, totalSeats - totalBooked);
 
+  // Note: For General Analysis, we use total booked income regardless of received status for projection,
+  // but Host Settlement calculates on Received only.
   const agencyCollection = activeTour.partnerAgencies 
     ? activeTour.partnerAgencies.reduce((sum, a) => 
         sum + (a.guests ? a.guests.reduce((gSum, g) => gSum + Number(g.collection || 0), 0) : 0), 0)
@@ -174,7 +182,10 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
   const netProfit = totalIncome - totalExpenses;
 
   // Host Settlement Balance
-  const hostSpending = (totalDailyMeals + totalDailyTransport + totalDailyExtra) + totalOtherFixed;
+  // Host Spend = Daily Expenses + Other Fixed + Host's Share of Bus Rent
+  const hostBusShare = Math.max(0, totalBusRent - safeNum(activeTour.busConfig?.adminPaidRent));
+  const hostSpending = (totalDailyMeals + totalDailyTransport + totalDailyExtra) + totalOtherFixed + hostBusShare;
+  
   const hostSettlementBalance = hostCollection - hostSpending;
   const hostStatus = activeTour.hostSettlementStatus || 'unpaid';
 
@@ -188,7 +199,10 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
   // Get detailed rates (Reg, D1, D2) and the breakdown
   const costPerSeat = calculateBuyRates(activeTour);
   
-  // NOTE: busShare from calculateBuyRates includes the Rent adjustment math
+  // Adjusted Rent Logic for Per Head Display (Total Rent - Penalty)
+  // We use this for display breakdown to show effective cost distribution
+  const penaltyAmount = safeNum(activeTour.penaltyAmount) || 500;
+  // Note: calculateBuyRates handles the bus math distribution.
   const busPerRegular = Math.ceil(costPerSeat.busShare || 0);
 
   const seatData = [
