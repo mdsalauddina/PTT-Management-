@@ -132,22 +132,18 @@ const HostGuestList: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) 
               (safeNum(guest.feeBreakdown.disc1) * safeNum(fees.disc1)) +
               (safeNum(guest.feeBreakdown.disc2) * safeNum(fees.disc2));
       } else {
-          // Fallback: If no breakdown or bill amount, assume total = collection (i.e. full due, 0 advance)
+          // Fallback: If no breakdown or bill amount, assume total = collection
           totalPrice = safeNum(guest.collection);
       }
 
-      // 2. Collection Target (The amount Host needs to collect)
-      const collectionTarget = safeNum(guest.collection);
+      // 2. Paid Amount (What Host Collected/Guests Paid)
+      const paidAmount = safeNum(guest.collection);
 
-      // 3. Paid (Advance) Calculation
-      // Logic: Advance = Total Price - Collection Target
-      // If isReceived is true, it means Collection Target is now Paid too. But for "Joma" field, we show what was ALREADY paid + what is collected?
-      // User Request: "Paid field calculation = Guest Total Income - Due Money (Baki)"
-      // Here "Baki" implies the `collection` amount if pending.
-      // So Paid (Advance) = Total - Collection.
-      const advancePaid = Math.max(0, totalPrice - collectionTarget);
+      // 3. Due Amount
+      // Logic: Total Bill - Paid Amount
+      const dueAmount = Math.max(0, totalPrice - paidAmount);
       
-      return { totalPrice, collectionTarget, advancePaid };
+      return { totalPrice, paidAmount, dueAmount };
   };
 
   if (!activeTour) return (
@@ -215,7 +211,9 @@ const HostGuestList: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) 
                       const isReceived = guest.isReceived || false;
                       const isProcessing = processingId === guest.id;
                       const isAgency = guest.type === 'agency';
-                      const collectionAmount = isReceived ? Number(guest.collection || 0) : (Number(guest.collection));
+                      
+                      // For List View, show "Paid" (Collection) amount as usual
+                      const collectionAmount = Number(guest.collection || 0);
 
                       return (
                       <div 
@@ -302,7 +300,7 @@ const HostGuestList: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) 
                                 </div>
                                 <div className={`flex-1 rounded-lg p-2 border transition-colors ${isReceived ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
                                     <p className={`text-[8px] font-bold uppercase tracking-wider mb-0.5 ${isReceived ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                        {isReceived ? 'কালেকশন (গৃহীত)' : 'কালেকশন (বাকি)'}
+                                        {isReceived ? 'পেমেন্ট (Paid)' : 'পেমেন্ট (Due)'}
                                     </p>
                                     <div className="flex items-center gap-1">
                                         <Wallet size={10} className={isReceived ? "text-emerald-400" : "text-rose-400"}/>
@@ -376,7 +374,7 @@ const HostGuestList: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) 
 
                         {/* Financials Breakdown */}
                         {(() => {
-                            const { totalPrice, collectionTarget, advancePaid } = getGuestCalculations(selectedGuestModal.guest, activeTour);
+                            const { totalPrice, paidAmount, dueAmount } = getGuestCalculations(selectedGuestModal.guest, activeTour);
                             const isReceived = selectedGuestModal.guest.isReceived;
                             
                             return (
@@ -384,7 +382,7 @@ const HostGuestList: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) 
                                     <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex justify-between items-center">
                                         <div className="flex items-center gap-2">
                                             <Tag size={14} className="text-slate-400"/>
-                                            <span className="text-[10px] font-bold text-slate-500 uppercase">প্যাকেজ প্রাইস (Total)</span>
+                                            <span className="text-[10px] font-bold text-slate-500 uppercase">প্যাকেজ (Total)</span>
                                         </div>
                                         <span className="font-black text-slate-800 text-sm">৳{totalPrice.toLocaleString()}</span>
                                     </div>
@@ -393,19 +391,18 @@ const HostGuestList: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) 
                                         <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100 flex flex-col justify-center">
                                             <div className="flex items-center gap-1.5 mb-1">
                                                 <Banknote size={12} className="text-emerald-500"/>
-                                                <span className="text-[9px] font-bold text-emerald-600 uppercase">জমা দিয়েছে (Paid)</span>
+                                                <span className="text-[9px] font-bold text-emerald-600 uppercase">জমা (Paid)</span>
                                             </div>
-                                            <span className="font-black text-emerald-700 text-lg">৳{advancePaid.toLocaleString()}</span>
-                                            <span className="text-[8px] font-bold text-emerald-400">(অ্যাডভান্স)</span>
+                                            <span className="font-black text-emerald-700 text-lg">৳{paidAmount.toLocaleString()}</span>
                                         </div>
 
-                                        <div className={`p-3 rounded-xl border flex flex-col justify-center ${isReceived ? 'bg-slate-100 border-slate-200' : 'bg-rose-50 border-rose-100'}`}>
+                                        <div className={`p-3 rounded-xl border flex flex-col justify-center ${dueAmount > 0 ? 'bg-rose-50 border-rose-100' : 'bg-slate-100 border-slate-200'}`}>
                                             <div className="flex items-center gap-1.5 mb-1">
-                                                <Wallet size={12} className={isReceived ? "text-slate-400" : "text-rose-500"}/>
-                                                <span className={`text-[9px] font-bold uppercase ${isReceived ? 'text-slate-500' : 'text-rose-600'}`}>কালেকশন (Due)</span>
+                                                <Wallet size={12} className={dueAmount > 0 ? "text-rose-500" : "text-slate-400"}/>
+                                                <span className={`text-[9px] font-bold uppercase ${dueAmount > 0 ? 'text-rose-600' : 'text-slate-500'}`}>বাকি (Due)</span>
                                             </div>
-                                            <span className={`font-black text-lg ${isReceived ? 'text-slate-600 line-through decoration-2 opacity-50' : 'text-rose-700'}`}>
-                                                ৳{collectionTarget.toLocaleString()}
+                                            <span className={`font-black text-lg ${dueAmount > 0 ? 'text-rose-700' : 'text-slate-500'}`}>
+                                                ৳{dueAmount.toLocaleString()}
                                             </span>
                                         </div>
                                     </div>
@@ -414,11 +411,11 @@ const HostGuestList: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) 
                                     <div className="mt-2 flex justify-center">
                                         {isReceived ? (
                                             <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100">
-                                                <CheckCircle size={12}/> পেমেন্ট রিসিভ করা হয়েছে (Paid Full)
+                                                <CheckCircle size={12}/> রিসিভ করা হয়েছে (Arrived)
                                             </span>
                                         ) : (
                                             <span className="flex items-center gap-1.5 text-[10px] font-bold text-rose-500 bg-rose-50 px-3 py-1.5 rounded-full border border-rose-100">
-                                                <Info size={12}/> পেমেন্ট পেন্ডিং (কালেকশন বাকি)
+                                                <Info size={12}/> পেন্ডিং (Not Arrived)
                                             </span>
                                         )}
                                     </div>

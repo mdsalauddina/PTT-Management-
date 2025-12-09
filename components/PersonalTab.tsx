@@ -1,11 +1,10 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, PersonalData, Guest } from '../types';
 import { db } from '../services/firebase';
 import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
 import { calculatePersonalSettlement, safeNum, recalculateTourSeats } from '../utils/calculations';
-import { Save, PlusCircle, Trash2, Receipt, UserCircle, ChevronDown, Wallet, Users, Phone, Armchair, Settings, Calculator, Tag, MessageCircle, MapPin, Heart } from 'lucide-react';
+import { Save, PlusCircle, Trash2, Receipt, UserCircle, ChevronDown, Wallet, Users, Phone, Armchair, Settings, Calculator, Tag, MessageCircle, MapPin, Heart, Loader } from 'lucide-react';
 
 const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
   const [selectedTourId, setSelectedTourId] = useState<string>('');
@@ -28,6 +27,8 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
 
   const [isAddingGuest, setIsAddingGuest] = useState(false);
   const [showPricingEdit, setShowPricingEdit] = useState(false);
+  const [isSaving, setIsSaving] = useState(false); 
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
   
   // New Guest Form State
   const [newGuest, setNewGuest] = useState({
@@ -59,7 +60,6 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
               feeReg: '', 
               feeD1: '',
               feeD2: '',
-              // couplePrice: '', // Keep price if user toggles
               manualCollection: '' // Reset collection
           }));
       } else {
@@ -128,8 +128,10 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
 
   const settlement = calculatePersonalSettlement(activeTour || {} as any, personalData);
 
+  // Manual Save (Used for Expenses/Pricing changes)
   const handleSave = async () => {
     if (!activeTour) return;
+    setIsSaving(true);
     try {
       const docRef = doc(db, 'personal', `${activeTour.id}_${user.uid}`);
       await setDoc(docRef, { ...personalData, updatedAt: Timestamp.now() });
@@ -139,6 +141,8 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
     } catch (err) {
       console.error(err);
       alert("সেভ ব্যর্থ।");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -164,7 +168,8 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
       return (fReg * fees.regFee) + (fD1 * fees.d1Fee) + (fD2 * fees.d2Fee);
   };
 
-  const handleAddGuest = () => {
+  const handleAddGuest = async () => {
+      if(!activeTour) return;
       if(!newGuest.name) return;
       
       const sReg = safeNum(newGuest.seatReg);
@@ -188,8 +193,12 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
            return;
       }
 
-      const calculatedCollection = calculateNewGuestPayable();
-      const finalCollection = (newGuest.manualCollection) ? safeNum(newGuest.manualCollection) : calculatedCollection;
+      const calculatedBill = calculateNewGuestPayable();
+      
+      // Collection: If manual is entered, use that. Else default to bill amount.
+      const actualCollection = (newGuest.manualCollection !== '') 
+            ? safeNum(newGuest.manualCollection) 
+            : calculatedBill;
       
       // Auto-format phone
       let formattedPhone = newGuest.phone.trim();
@@ -197,42 +206,90 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
           formattedPhone = '+88' + formattedPhone;
       }
 
+      // Construct Guest Object carefully to avoid undefined values
       const g: Guest = {
           id: Date.now().toString(),
           name: newGuest.name,
           phone: formattedPhone,
-          address: newGuest.address,
+          address: newGuest.address || '',
           isCouple: newGuest.isCouple,
           seatCount: totalSeats,
-          seatNumbers: newGuest.seatNumbers,
-          unitPrice: 0,
-          collection: finalCollection,
-          totalBillAmount: calculatedCollection, // STORE ORIGINAL PRICE
+          seatNumbers: newGuest.seatNumbers || '',
+          unitPrice: 0, // Calculated/Derived
+          collection: actualCollection, // PAID AMOUNT
+          totalBillAmount: calculatedBill, // TOTAL PACKAGE PRICE
           seatType: 'regular',
-          // Breakdown for COST
           paxBreakdown: { regular: sReg, disc1: sD1, disc2: sD2 },
-          // Breakdown for INCOME (Fee logic ignored for Couple, relies on collection)
-          feeBreakdown: newGuest.isCouple ? undefined : { 
+      };
+
+      // Only add feeBreakdown if NOT couple. Firestore dislikes 'undefined'.
+      if (!newGuest.isCouple) {
+          g.feeBreakdown = { 
               regular: safeNum(newGuest.feeReg), 
               disc1: safeNum(newGuest.feeD1), 
               disc2: safeNum(newGuest.feeD2) 
-          }
-      };
+          };
+      }
       
-      setPersonalData({...personalData, guests: [...(personalData.guests || []), g]});
-      setNewGuest({ 
-          name: '', phone: '', address: '', isCouple: false, seatNumbers: '', 
-          seatReg: '', seatD1: '', seatD2: '', 
-          feeReg: '', feeD1: '', feeD2: '', 
-          couplePrice: '',
-          manualCollection: '' 
-      });
-      setIsAddingGuest(false);
+      // AUTO SAVE IMPLEMENTATION
+      setIsAutoSaving(true);
+      try {
+          // 1. Prepare updated data
+          const updatedGuests = [...(personalData.guests || []), g];
+          const updatedPersonalData = { ...personalData, guests: updatedGuests, updatedAt: Timestamp.now() };
+
+          // 2. Save to Server FIRST
+          const docRef = doc(db, 'personal', `${activeTour.id}_${user.uid}`);
+          await setDoc(docRef, updatedPersonalData);
+          
+          // 3. Recalculate seats
+          await recalculateTourSeats(activeTour.id);
+
+          // 4. Update Local State on success
+          setPersonalData(updatedPersonalData);
+          setNewGuest({ 
+              name: '', phone: '', address: '', isCouple: false, seatNumbers: '', 
+              seatReg: '', seatD1: '', seatD2: '', 
+              feeReg: '', feeD1: '', feeD2: '', 
+              couplePrice: '',
+              manualCollection: '' 
+          });
+          setIsAddingGuest(false);
+          // Success message optional for auto-save, but good for feedback
+          // alert("Guest Added Successfully!"); 
+      } catch (err) {
+          console.error(err);
+          alert("গেস্ট যোগ করা ব্যর্থ হয়েছে। দয়া করে আবার চেষ্টা করুন।");
+      } finally {
+          setIsAutoSaving(false);
+      }
   };
   
-  const removeGuest = (id: string) => {
+  const removeGuest = async (id: string) => {
+      if(!activeTour) return;
       if(!window.confirm("মুছে ফেলবেন?")) return;
-      setPersonalData({...personalData, guests: personalData.guests?.filter(g => g.id !== id)});
+      
+      setIsAutoSaving(true);
+      try {
+          // 1. Prepare updated data
+          const updatedGuests = personalData.guests?.filter(g => g.id !== id) || [];
+          const updatedPersonalData = { ...personalData, guests: updatedGuests, updatedAt: Timestamp.now() };
+
+          // 2. Save to Server FIRST
+          const docRef = doc(db, 'personal', `${activeTour.id}_${user.uid}`);
+          await setDoc(docRef, updatedPersonalData);
+          
+          // 3. Recalculate seats
+          await recalculateTourSeats(activeTour.id);
+
+          // 4. Update Local State
+          setPersonalData(updatedPersonalData);
+      } catch (err) {
+          console.error(err);
+          alert("ডিলিট ব্যর্থ হয়েছে।");
+      } finally {
+          setIsAutoSaving(false);
+      }
   };
 
   const handleSeatChange = (field: 'seatReg'|'seatD1'|'seatD2', val: string) => {
@@ -252,7 +309,6 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
   };
 
   if (!activeTour) return <div className="p-10 text-center text-xs text-slate-400">লোড হচ্ছে...</div>;
-  const isAdmin = user.role === 'admin';
 
   return (
     <div className="p-4 pb-24 lg:pb-10 max-w-2xl mx-auto font-sans space-y-3">
@@ -290,12 +346,16 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
                 <span className={settlement.netResult >= 0 ? "text-emerald-600 font-black text-xs" : "text-rose-600 font-black text-xs"}>{settlement.netResult}৳</span>
             </div>
          </div>
-         <button 
-            onClick={handleSave} 
-            className="flex items-center gap-1.5 bg-slate-900 text-white px-4 py-2 rounded-xl font-bold shadow-md hover:bg-slate-800 active:scale-95 text-[10px] uppercase tracking-wider transition-all"
-         >
-            <Save size={12} /> সেভ
-         </button>
+         {/* Only show manual save for settings/expenses changes */}
+         {showPricingEdit && (
+             <button 
+                onClick={handleSave} 
+                disabled={isSaving}
+                className="flex items-center gap-1.5 bg-slate-900 text-white px-4 py-2 rounded-xl font-bold shadow-md hover:bg-slate-800 active:scale-95 text-[10px] uppercase tracking-wider transition-all disabled:opacity-70"
+             >
+                {isSaving ? <Loader size={12} className="animate-spin" /> : <Save size={12} />} সেভ (Settings)
+             </button>
+         )}
       </div>
 
       {/* PRICING CONFIG */}
@@ -363,15 +423,17 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
                 
                 {/* Couple Package Input or Normal Package Input */}
                 {newGuest.isCouple ? (
-                    <div className="bg-pink-50 p-2.5 rounded-xl border border-pink-100">
-                        <div className="text-[10px] font-bold text-pink-500 text-center mb-2">
+                    <div className="bg-pink-50 p-2.5 rounded-xl border border-pink-100 space-y-2">
+                        <div className="text-[10px] font-bold text-pink-500 text-center">
                             কাপল: অটোমেটিক ২ জন রেগুলার গেস্ট (সিট) হিসেবে গণ্য হবে।
                         </div>
-                        <label className="text-[9px] font-bold text-pink-400 uppercase flex items-center gap-1 mb-1">
-                            <Tag size={10} /> কাপল প্যাকেজ প্রাইস
-                        </label>
-                        <input type="number" placeholder="Amount" className="w-full p-2 bg-white border border-pink-200 rounded-lg text-center text-sm font-bold text-pink-600 outline-none focus:ring-2 focus:ring-pink-300"
-                            value={newGuest.couplePrice} onChange={e => setNewGuest({...newGuest, couplePrice: e.target.value})} />
+                        <div>
+                            <label className="text-[9px] font-bold text-pink-400 uppercase flex items-center gap-1 mb-1">
+                                <Tag size={10} /> কাপল প্যাকেজ প্রাইস (Total Bill)
+                            </label>
+                            <input type="number" placeholder="Total Package Amount" className="w-full p-2 bg-white border border-pink-200 rounded-lg text-center text-sm font-bold text-pink-600 outline-none focus:ring-2 focus:ring-pink-300"
+                                value={newGuest.couplePrice} onChange={e => setNewGuest({...newGuest, couplePrice: e.target.value})} />
+                        </div>
                     </div>
                 ) : (
                     <div className="bg-white p-2.5 rounded-xl border border-slate-200">
@@ -394,9 +456,9 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
                     <div className="text-[10px] font-bold text-slate-500">
                         {newGuest.isCouple ? 'প্যাকেজ:' : 'বিল:'} <span className="text-emerald-600 text-xs">৳{calculateNewGuestPayable()}</span>
                     </div>
-                    <div className="flex items-center gap-1">
-                            <span className="text-[8px] font-bold text-slate-400 uppercase">
-                                {newGuest.isCouple ? 'কালেকশন:' : 'ম্যানুয়াল:'}
+                    <div className="flex items-center gap-2">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase">
+                                {newGuest.isCouple ? 'কালেকশন (জমা):' : 'ম্যানুয়াল (জমা):'}
                             </span>
                             <input 
                             type="number" 
@@ -410,7 +472,9 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
 
                 <div className="flex gap-2 pt-1">
                     <button onClick={() => setIsAddingGuest(false)} className="flex-1 py-2 rounded-xl text-[10px] font-bold bg-white border border-slate-200 text-slate-500 hover:bg-slate-50">বাতিল</button>
-                    <button onClick={handleAddGuest} className="flex-1 py-2 rounded-xl text-[10px] font-bold bg-indigo-600 text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700">যোগ করুন</button>
+                    <button onClick={handleAddGuest} disabled={isAutoSaving} className="flex-1 py-2 rounded-xl text-[10px] font-bold bg-indigo-600 text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 disabled:opacity-70 flex justify-center items-center gap-1">
+                        {isAutoSaving && <Loader size={12} className="animate-spin"/>} যোগ করুন
+                    </button>
                 </div>
             </div>
         )}
@@ -472,9 +536,13 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
                                 )}
                             </div>
                         </div>
-                        <div className="text-right">
-                             <p className="font-black text-emerald-600 text-xs">৳{g.collection}</p>
-                             <button onClick={() => removeGuest(g.id)} className="mt-1 p-1 text-slate-200 hover:text-rose-500 hover:bg-rose-50 rounded transition-all"><Trash2 size={12}/></button>
+                        <div className="text-right flex flex-col items-end">
+                             {/* Show Total Bill if exists (Package Price) */}
+                             {g.totalBillAmount && g.totalBillAmount !== g.collection && (
+                                 <span className="text-[9px] font-bold text-slate-400">Bill: ৳{g.totalBillAmount}</span>
+                             )}
+                             <p className="font-black text-emerald-600 text-xs">Paid: ৳{g.collection}</p>
+                             <button onClick={() => removeGuest(g.id)} disabled={isAutoSaving} className="mt-1 p-1 text-slate-200 hover:text-rose-500 hover:bg-rose-50 rounded transition-all"><Trash2 size={12}/></button>
                         </div>
                     </div>
                 ))}
