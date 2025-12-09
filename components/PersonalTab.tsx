@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, PersonalData, Guest } from '../types';
 import { db } from '../services/firebase';
@@ -42,7 +44,8 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
       feeReg: '',
       feeD1: '',
       feeD2: '',
-      manualCollection: '' // Used for manual override OR Couple Package Price
+      couplePrice: '', // Added for Couple Package Price
+      manualCollection: '' // Used for manual override
   });
 
   // Effect to reset/force fields when isCouple changes
@@ -53,9 +56,11 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
               seatReg: '2', // Force 2 regular seats
               seatD1: '0',
               seatD2: '0',
-              feeReg: '', // Not used for couple, manualCollection is used
+              feeReg: '', 
               feeD1: '',
-              feeD2: ''
+              feeD2: '',
+              // couplePrice: '', // Keep price if user toggles
+              manualCollection: '' // Reset collection
           }));
       } else {
           // Reset if unchecked (optional, but good UX)
@@ -149,7 +154,7 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
 
   const calculateNewGuestPayable = () => {
       if (newGuest.isCouple) {
-          return safeNum(newGuest.manualCollection);
+          return safeNum(newGuest.couplePrice);
       }
       const fReg = safeNum(newGuest.feeReg);
       const fD1 = safeNum(newGuest.feeD1);
@@ -178,13 +183,13 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
            return;
       }
       
-      if (newGuest.isCouple && !newGuest.manualCollection) {
+      if (newGuest.isCouple && !newGuest.couplePrice) {
            alert("কাপল প্যাকেজের প্রাইস উল্লেখ করুন।");
            return;
       }
 
       const calculatedCollection = calculateNewGuestPayable();
-      const finalCollection = (newGuest.manualCollection && !newGuest.isCouple) ? safeNum(newGuest.manualCollection) : calculatedCollection;
+      const finalCollection = (newGuest.manualCollection) ? safeNum(newGuest.manualCollection) : calculatedCollection;
       
       // Auto-format phone
       let formattedPhone = newGuest.phone.trim();
@@ -202,6 +207,7 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
           seatNumbers: newGuest.seatNumbers,
           unitPrice: 0,
           collection: finalCollection,
+          totalBillAmount: calculatedCollection, // STORE ORIGINAL PRICE
           seatType: 'regular',
           // Breakdown for COST
           paxBreakdown: { regular: sReg, disc1: sD1, disc2: sD2 },
@@ -218,6 +224,7 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
           name: '', phone: '', address: '', isCouple: false, seatNumbers: '', 
           seatReg: '', seatD1: '', seatD2: '', 
           feeReg: '', feeD1: '', feeD2: '', 
+          couplePrice: '',
           manualCollection: '' 
       });
       setIsAddingGuest(false);
@@ -354,14 +361,19 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
                     </div>
                 )}
                 
-                {newGuest.isCouple && (
-                    <div className="text-[10px] font-bold text-pink-500 bg-pink-50 p-2 rounded-lg border border-pink-100 text-center">
-                        কাপল: অটোমেটিক ২ জন রেগুলার গেস্ট (সিট) হিসেবে গণ্য হবে।
+                {/* Couple Package Input or Normal Package Input */}
+                {newGuest.isCouple ? (
+                    <div className="bg-pink-50 p-2.5 rounded-xl border border-pink-100">
+                        <div className="text-[10px] font-bold text-pink-500 text-center mb-2">
+                            কাপল: অটোমেটিক ২ জন রেগুলার গেস্ট (সিট) হিসেবে গণ্য হবে।
+                        </div>
+                        <label className="text-[9px] font-bold text-pink-400 uppercase flex items-center gap-1 mb-1">
+                            <Tag size={10} /> কাপল প্যাকেজ প্রাইস
+                        </label>
+                        <input type="number" placeholder="Amount" className="w-full p-2 bg-white border border-pink-200 rounded-lg text-center text-sm font-bold text-pink-600 outline-none focus:ring-2 focus:ring-pink-300"
+                            value={newGuest.couplePrice} onChange={e => setNewGuest({...newGuest, couplePrice: e.target.value})} />
                     </div>
-                )}
-
-                {/* Package Selection (Income) */}
-                {!newGuest.isCouple ? (
+                ) : (
                     <div className="bg-white p-2.5 rounded-xl border border-slate-200">
                         <label className="text-[9px] font-bold text-slate-400 uppercase flex items-center gap-1 mb-1.5">
                             <Tag size={10} /> বিল প্যাকেজ (আয়)
@@ -375,39 +387,26 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
                                 value={newGuest.feeD2} onChange={e => setNewGuest({...newGuest, feeD2: e.target.value})}/>
                         </div>
                     </div>
-                ) : (
-                    <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                        <label className="text-[9px] font-bold text-slate-400 uppercase flex items-center gap-1 mb-1.5">
-                            <Tag size={10} /> কাস্টম প্যাকেজ প্রাইস
-                        </label>
-                        <input 
-                            type="number" 
-                            placeholder="মোট প্যাকেজ মূল্য (Total Amount)" 
-                            className="w-full p-2 rounded-lg border border-emerald-200 bg-emerald-50 text-xs font-bold text-emerald-700 outline-none focus:border-emerald-400"
-                            value={newGuest.manualCollection}
-                            onChange={e => setNewGuest({...newGuest, manualCollection: e.target.value})}
-                        />
-                    </div>
                 )}
 
-                {/* Total & Manual Override */}
-                {!newGuest.isCouple && (
-                    <div className="flex justify-between items-center px-1">
-                        <div className="text-[10px] font-bold text-slate-500">
-                            বিল: <span className="text-emerald-600 text-xs">৳{calculateNewGuestPayable()}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                             <span className="text-[8px] font-bold text-slate-400 uppercase">ম্যানুয়াল:</span>
-                             <input 
-                                type="number" 
-                                placeholder="Amount" 
-                                className="w-20 p-1.5 rounded-lg border border-slate-200 text-[10px] font-bold text-right outline-none focus:border-emerald-400"
-                                value={newGuest.manualCollection}
-                                onChange={e => setNewGuest({...newGuest, manualCollection: e.target.value})}
-                             />
-                        </div>
+                {/* Total & Manual Override - Unified for both */}
+                <div className="flex justify-between items-center px-1">
+                    <div className="text-[10px] font-bold text-slate-500">
+                        {newGuest.isCouple ? 'প্যাকেজ:' : 'বিল:'} <span className="text-emerald-600 text-xs">৳{calculateNewGuestPayable()}</span>
                     </div>
-                )}
+                    <div className="flex items-center gap-1">
+                            <span className="text-[8px] font-bold text-slate-400 uppercase">
+                                {newGuest.isCouple ? 'কালেকশন:' : 'ম্যানুয়াল:'}
+                            </span>
+                            <input 
+                            type="number" 
+                            placeholder="Amount" 
+                            className="w-24 p-1.5 rounded-lg border border-slate-200 text-[10px] font-bold text-right outline-none focus:border-emerald-400"
+                            value={newGuest.manualCollection}
+                            onChange={e => setNewGuest({...newGuest, manualCollection: e.target.value})}
+                            />
+                    </div>
+                </div>
 
                 <div className="flex gap-2 pt-1">
                     <button onClick={() => setIsAddingGuest(false)} className="flex-1 py-2 rounded-xl text-[10px] font-bold bg-white border border-slate-200 text-slate-500 hover:bg-slate-50">বাতিল</button>

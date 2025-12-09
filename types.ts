@@ -54,7 +54,8 @@ export interface Guest {
   seatCount: number; // Number of seats for this group
   seatNumbers?: string; // Added seat numbers (e.g., "A1, A2")
   unitPrice: number; // Per seat collection amount
-  collection: number; // Total collection (seatCount * unitPrice)
+  collection: number; // Total collection (seatCount * unitPrice) OR Manual Collection Amount
+  totalBillAmount?: number; // Added: Total Package Price (before manual collection override)
   seatType: 'regular' | 'disc1' | 'disc2'; // Kept for backward compatibility/default
   isReceived?: boolean; // New field: true if guest has arrived, false/undefined if pending
   isCouple?: boolean; // Added: Flag to identify couple package guests
