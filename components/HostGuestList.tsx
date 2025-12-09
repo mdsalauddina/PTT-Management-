@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { CommonTabProps, Guest, PersonalData, PartnerAgency } from '../types';
 import { db } from '../services/firebase';
 import { collection, query, where, getDocs, doc, updateDoc, Timestamp, getDoc } from 'firebase/firestore';
-import { ChevronDown, Users, Phone, Armchair, Building, User, Wallet, MessageCircle, Check, X, MapPin } from 'lucide-react';
+import { ChevronDown, Users, Phone, Armchair, Building, User, Wallet, MessageCircle, Check, X, MapPin, Calendar, CheckCircle, Info, XCircle } from 'lucide-react';
 import { recalculateTourSeats } from '../utils/calculations';
 
 const HostGuestList: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) => {
@@ -11,6 +11,15 @@ const HostGuestList: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) 
   const [personalGuests, setPersonalGuests] = useState<{guest: Guest, docId: string}[]>([]);
   const [loading, setLoading] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  
+  // Modal State
+  const [selectedGuestModal, setSelectedGuestModal] = useState<{
+      guest: Guest, 
+      tourName: string, 
+      tourDate: string,
+      isAgency: boolean,
+      agencyName?: string
+  } | null>(null);
 
   useEffect(() => {
     if (tours.length > 0 && !selectedTourId) {
@@ -51,7 +60,8 @@ const HostGuestList: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) 
       fetchGuests();
   }, [activeTour, processingId]); // Reload when processing done
 
-  const toggleGuestStatus = async (guestId: string, docId: string, isAgency: boolean, currentStatus: boolean) => {
+  const toggleGuestStatus = async (e: React.MouseEvent, guestId: string, docId: string, isAgency: boolean, currentStatus: boolean) => {
+      e.stopPropagation(); // Prevent modal open
       if (!activeTour) return;
       setProcessingId(guestId);
 
@@ -136,7 +146,7 @@ const HostGuestList: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) 
             <Users size={18} />
         </div>
         <div className="flex-1 min-w-0">
-            <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 truncate">গেস্ট লিস্ট (হোস্ট ভিউ)</label>
+            <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 truncate">গেস্ট লিস্ট</label>
             <div className="relative">
                 <select 
                     value={selectedTourId}
@@ -176,7 +186,17 @@ const HostGuestList: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) 
                       const collectionAmount = isReceived ? Number(guest.collection || 0) : (Number(guest.seatCount || 1) * 500);
 
                       return (
-                      <div key={`${guest.id}_${idx}`} className={`p-4 transition-colors ${isReceived ? 'bg-white' : 'bg-slate-50/30'}`}>
+                      <div 
+                        key={`${guest.id}_${idx}`} 
+                        className={`p-4 transition-colors cursor-pointer active:bg-slate-100 ${isReceived ? 'bg-white' : 'bg-slate-50/30'}`}
+                        onClick={() => setSelectedGuestModal({
+                            guest, 
+                            tourName: activeTour.name, 
+                            tourDate: activeTour.date, 
+                            isAgency,
+                            agencyName: isAgency ? guest.agencyName : undefined
+                        })}
+                      >
                           <div className="flex justify-between items-start gap-3">
                               <div className="flex items-start gap-3 flex-1 min-w-0">
                                   <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5 transition-colors ${isReceived ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-500'}`}>
@@ -189,10 +209,10 @@ const HostGuestList: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) 
                                               <div className="flex flex-wrap items-center gap-2 mt-1 mb-2">
                                                    <span className="text-[10px] font-bold text-slate-500">{guest.phone}</span>
                                                    <div className="flex gap-1.5">
-                                                      <a href={`tel:${guest.phone}`} className="text-[10px] text-white font-bold bg-indigo-500 px-2 py-1 rounded-lg shadow-sm shadow-indigo-200 hover:bg-indigo-600 transition-all flex items-center gap-1">
+                                                      <a href={`tel:${guest.phone}`} onClick={e => e.stopPropagation()} className="text-[10px] text-white font-bold bg-indigo-500 px-2 py-1 rounded-lg shadow-sm shadow-indigo-200 hover:bg-indigo-600 transition-all flex items-center gap-1">
                                                           <Phone size={10}/> কল
                                                       </a>
-                                                      <a href={getWhatsAppLink(guest.phone)} target="_blank" rel="noopener noreferrer" className="text-[10px] text-white font-bold bg-green-500 px-2 py-1 rounded-lg shadow-sm shadow-green-200 hover:bg-green-600 transition-all flex items-center gap-1">
+                                                      <a href={getWhatsAppLink(guest.phone)} onClick={e => e.stopPropagation()} target="_blank" rel="noopener noreferrer" className="text-[10px] text-white font-bold bg-green-500 px-2 py-1 rounded-lg shadow-sm shadow-green-200 hover:bg-green-600 transition-all flex items-center gap-1">
                                                           <MessageCircle size={10}/> WA
                                                       </a>
                                                    </div>
@@ -219,7 +239,7 @@ const HostGuestList: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) 
                               {/* TOGGLE SWITCH */}
                               <button 
                                 disabled={isProcessing}
-                                onClick={() => toggleGuestStatus(guest.id, docId, isAgency, isReceived)}
+                                onClick={(e) => toggleGuestStatus(e, guest.id, docId, isAgency, isReceived)}
                                 className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border text-[10px] font-bold shadow-sm transition-all active:scale-95 ${
                                     isReceived 
                                     ? 'bg-emerald-500 text-white border-emerald-600 hover:bg-emerald-600' 
@@ -265,6 +285,97 @@ const HostGuestList: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) 
               </div>
           )}
       </div>
+
+      {/* GUEST DETAIL MODAL */}
+      {selectedGuestModal && (
+            <div 
+                className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in" 
+                onClick={() => setSelectedGuestModal(null)}
+            >
+                <div 
+                    className="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl overflow-hidden relative" 
+                    onClick={e => e.stopPropagation()}
+                >
+                    {/* Header */}
+                    <div className="bg-gradient-to-br from-slate-800 to-slate-900 p-6 text-white relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-4 opacity-10 transform rotate-12"><Users size={100}/></div>
+                        <h3 className="text-xl font-black tracking-tight relative z-10 leading-tight">{selectedGuestModal.guest.name}</h3>
+                        <div className="flex items-center gap-2 mt-2 relative z-10 opacity-80 text-xs font-bold">
+                            {selectedGuestModal.isAgency ? <Building size={14}/> : <User size={14}/>}
+                            {selectedGuestModal.isAgency ? selectedGuestModal.agencyName : 'পার্সোনাল বুকিং'}
+                        </div>
+                        <button onClick={() => setSelectedGuestModal(null)} className="absolute top-4 right-4 bg-white/10 p-2 rounded-full text-white hover:bg-white/20 transition-colors z-20 backdrop-blur-sm">
+                            <X size={16}/>
+                        </button>
+                    </div>
+                    
+                    <div className="p-6 space-y-5">
+                        {/* Event Info */}
+                        <div className="flex items-center gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                            <div className="bg-white p-3 rounded-xl border border-slate-100 text-violet-600 shadow-sm">
+                                <Calendar size={20}/>
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">ইভেন্ট ডিটেইলস</p>
+                                <p className="text-sm font-black text-slate-800 leading-tight">{selectedGuestModal.tourName}</p>
+                                <p className="text-xs font-bold text-slate-500 mt-0.5">{selectedGuestModal.tourDate}</p>
+                            </div>
+                        </div>
+
+                        {/* Info Grid */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">ফোন নম্বর</p>
+                                <p className="text-xs font-black text-slate-700">{selectedGuestModal.guest.phone || 'N/A'}</p>
+                            </div>
+                            <div className="space-y-1">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">ঠিকানা</p>
+                                <p className="text-xs font-black text-slate-700 truncate">{selectedGuestModal.guest.address || 'N/A'}</p>
+                            </div>
+                            <div className="space-y-1">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">সিট সংখ্যা</p>
+                                <p className="text-xs font-black text-slate-700 bg-slate-100 px-2 py-0.5 rounded w-fit">{selectedGuestModal.guest.seatCount}</p>
+                            </div>
+                            <div className="space-y-1">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">সিট নম্বর</p>
+                                <p className="text-xs font-black text-violet-600 bg-violet-50 px-2 py-0.5 rounded w-fit">{selectedGuestModal.guest.seatNumbers || 'N/A'}</p>
+                            </div>
+                        </div>
+
+                        {/* Financials */}
+                        <div className="border-t border-slate-100 pt-5">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 text-center">
+                                    <p className="text-[9px] font-bold text-emerald-500 uppercase mb-1 tracking-wider">জমা দিয়েছে (Paid)</p>
+                                    <p className="text-xl font-black text-emerald-700">
+                                        ৳{selectedGuestModal.guest.isReceived ? Number(selectedGuestModal.guest.collection).toLocaleString() : 0}
+                                    </p>
+                                </div>
+                                <div className="bg-rose-50 p-4 rounded-2xl border border-rose-100 text-center">
+                                    <p className="text-[9px] font-bold text-rose-500 uppercase mb-1 tracking-wider">বাকি আছে (Due)</p>
+                                    <p className="text-xl font-black text-rose-700">
+                                        ৳{selectedGuestModal.guest.isReceived ? 0 : Number(selectedGuestModal.guest.collection).toLocaleString()}
+                                    </p>
+                                </div>
+                            </div>
+                            
+                            {/* Status Footer */}
+                            <div className="mt-4 flex justify-center">
+                                {selectedGuestModal.guest.isReceived ? (
+                                    <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100">
+                                        <CheckCircle size={12}/> পেমেন্ট রিসিভ করা হয়েছে
+                                    </span>
+                                ) : (
+                                    <span className="flex items-center gap-1.5 text-[10px] font-bold text-rose-500 bg-rose-50 px-3 py-1.5 rounded-full border border-rose-100">
+                                        <Info size={12}/> পেমেন্ট পেন্ডিং (এখনো রিসিভ হয়নি)
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+      )}
     </div>
   );
 };

@@ -1,5 +1,3 @@
-
-
 import { BusConfig, PartnerAgency, Tour, PersonalData, Guest } from '../types';
 import { db } from '../services/firebase';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
@@ -63,16 +61,11 @@ export const calculateTotalOtherFixedCosts = (tour: Tour): number => {
 };
 
 // Shared Helper to calculate Buy Rates
-// UPDATED LOGIC: 
-// 1. Bus Fare: (Total Rent - Penalty) / Total Received Guests
-// 2. Regular Hotel: Regular Hotel Cost / Regular Received Guests (excluding couples)
-// 3. Couple Hotel: Couple Hotel Cost / Couple Received Guests
-// 4. Other Variables: Total Cost / Total Received Guests
 export const calculateBuyRates = (tour: Tour) => {
     // 1. Gather Guest Stats (Received vs Non-Received, Couple vs Regular)
     let totalReceived = 0;
-    let recCoupleCount = 0;
-    let recRegularCount = 0; // Non-couple received
+    let recCoupleCount = 0; // Total seats occupied by couples
+    let recRegularCount = 0; // Total seats occupied by regular/discount guests
     
     // Iterate Agencies to count
     if (tour.partnerAgencies) {
@@ -91,26 +84,40 @@ export const calculateBuyRates = (tour: Tour) => {
         });
     }
 
-    const derivedTotal = totalReceived; // From loop above
+    // Use stored total if available and reliable, otherwise use derived
+    // 'tour.totalGuests' is updated by recalculateTourSeats to be the Received Count
     const storedTotal = tour.totalGuests || 0;
+    const variableDivisor = (storedTotal > 0) ? storedTotal : (totalReceived > 0 ? totalReceived : 1);
     
-    const variableDivisor = (storedTotal > 0) ? storedTotal : (derivedTotal > 0 ? derivedTotal : 1);
-    
+    // Couple Unit Divisor (Pairs):
+    // 2 seats = 1 Couple Unit
+    const coupleUnitDivisor = recCoupleCount > 0 ? (recCoupleCount / 2) : 1;
+    // Regular Divisor (Persons):
+    const regularDivisor = recRegularCount > 0 ? recRegularCount : 1;
+
     // --- Variable Cost Calculation ---
     const hostFee = safeNum(tour.costs?.hostFee);
     const otherFixedTotal = calculateTotalOtherFixedCosts(tour);
     const dailyExpensesTotal = calculateTotalDailyExpenses(tour);
     
-    // Common Variable (Food, Transport, Host, Other Fixed) -> Divided by TOTAL RECEIVED
+    // Common Variable (Food, Transport, Host, Other Fixed) -> Divided by TOTAL RECEIVED PERSONS
     const commonVariablePerHead = Math.ceil((hostFee + otherFixedTotal + dailyExpensesTotal) / variableDivisor);
     
     // Hotel Cost (Split)
     const totalHotelCost = safeNum(tour.costs?.hotelCost); // Regular
     const totalCoupleHotelCost = safeNum(tour.costs?.coupleHotelCost); // Couple
     
-    // Bus Fare Logic (Total Rent - Penalty) / Total Received
+    // Bus Fare Logic (Total Rent - Penalty) / Total Received Persons
     const totalRent = safeNum(tour.busConfig?.totalRent);
-    const adjustedRent = totalRent; // simplified for now
+    const penaltyAmount = safeNum(tour.penaltyAmount) || 500;
+    
+    // Calculate Penalty deduction (roughly)
+    // Ideally we sum actual penalty collected from absent guests. 
+    // Here we assume: Adjusted Bus Rent = Total Rent - (Penalty Collected)
+    // For simplicity in this helper without full guest iteration again, we use Total Rent.
+    // *Refinement*: AnalysisTab usually handles the gross/net logic. Here we need a Buy Rate.
+    // We will use Total Rent. If penalty offsets rent, the profit margin increases in Analysis.
+    const adjustedRent = totalRent;
     
     // Distribute Discounts Gap
     const d1Amt = safeNum(tour.busConfig?.discount1Amount);
@@ -121,34 +128,44 @@ export const calculateBuyRates = (tour: Tour) => {
     const discountGap = (estD1 * d1Amt) + (estD2 * d2Amt);
     const regularBusFare = Math.ceil((adjustedRent + discountGap) / variableDivisor);
 
-    // Calculate Estimated Totals
-    const totalHotel = totalHotelCost + totalCoupleHotelCost;
-    const estimatedHotelRate = Math.ceil(totalHotel / variableDivisor);
-
-    const regularRate = regularBusFare + commonVariablePerHead + estimatedHotelRate;
-    const d1Rate = (regularBusFare - d1Amt) + commonVariablePerHead + estimatedHotelRate;
-    const d2Rate = (regularBusFare - d2Amt) + commonVariablePerHead + estimatedHotelRate;
+    // Calculate Estimated Totals per Seat Type
     
+    // Regular Hotel Per Head (Regular Guests only)
+    const regHotelPerHead = Math.ceil(totalHotelCost / regularDivisor);
+    
+    // Couple Hotel Per Unit (Couple Pair)
+    const coupleHotelPerUnit = Math.ceil(totalCoupleHotelCost / coupleUnitDivisor);
+
+    // Total Buy Rates
+    const regularRate = regularBusFare + commonVariablePerHead + regHotelPerHead;
+    const d1Rate = (regularBusFare - d1Amt) + commonVariablePerHead + regHotelPerHead;
+    const d2Rate = (regularBusFare - d2Amt) + commonVariablePerHead + regHotelPerHead;
+    
+    // Couple Package Rate (Per Pair)
+    // 2 People Bus + 2 People Variable + 1 Couple Hotel Unit
+    const couplePackageRate = (regularBusFare * 2) + (commonVariablePerHead * 2) + coupleHotelPerUnit;
+
     // Rates Output
     return {
-        regularBus: regularBusFare, // Base Bus Fare for Regular Seat
+        regularBus: regularBusFare, 
         d1Bus: regularBusFare - d1Amt,
         d2Bus: regularBusFare - d2Amt,
         commonVariable: commonVariablePerHead,
         
-        // Hotel Totals (for UI to divide)
-        totalHotelCost: totalHotelCost,
-        totalCoupleHotelCost: totalCoupleHotelCost,
+        // Hotel Totals
+        totalHotelCost,
+        totalCoupleHotelCost,
         
-        // Export detected counts from Agency list (partial data)
+        // Divisors
+        variableDivisor,
+        coupleUnitDivisor,
         partialRecRegular: recRegularCount,
-        partialRecCouple: recCoupleCount,
-        variableDivisor: variableDivisor,
 
-        // Total Estimated Rates
+        // Final Rates
         regular: regularRate,
         d1: d1Rate,
-        d2: d2Rate
+        d2: d2Rate,
+        couplePackageRate: couplePackageRate
     };
 };
 
@@ -161,7 +178,7 @@ export const calculateAgencySettlement = (tour: Tour, agency: PartnerAgency) => 
       totalCost: 0, 
       netAmount: 0, 
       totalSeats: 0, 
-      rates: { regular: 0, d1: 0, d2: 0 } 
+      rates: { regular: 0, d1: 0, d2: 0, couple: 0 } 
   };
 
   const agencyExpenses = agency.expenses.reduce((sum, exp) => sum + safeNum(exp.amount), 0);
@@ -169,11 +186,11 @@ export const calculateAgencySettlement = (tour: Tour, agency: PartnerAgency) => 
   
   const ratesObj = calculateBuyRates(tour);
   
-  // Use calculated rates from ratesObj directly
   const rates = {
       regular: ratesObj.regular,
       d1: ratesObj.d1,
-      d2: ratesObj.d2
+      d2: ratesObj.d2,
+      couple: ratesObj.couplePackageRate
   };
 
   const penaltyAmount = safeNum(tour.penaltyAmount) || 500; 
@@ -190,16 +207,21 @@ export const calculateAgencySettlement = (tour: Tour, agency: PartnerAgency) => 
           // Liability Calculation
           let guestLiability = 0;
           
-          if (guest.paxBreakdown) {
-              const { regular, disc1, disc2 } = guest.paxBreakdown;
-              guestLiability += (safeNum(regular) * rates.regular);
-              guestLiability += (safeNum(disc1) * rates.d1);
-              guestLiability += (safeNum(disc2) * rates.d2);
+          if (guest.isCouple) {
+              // Couple Liability is the Package Rate (covers 2 seats + hotel)
+              guestLiability = rates.couple;
           } else {
-               const type = guest.seatType || 'regular';
-               if (type === 'disc1') guestLiability += seats * rates.d1;
-               else if (type === 'disc2') guestLiability += seats * rates.d2;
-               else guestLiability += seats * rates.regular;
+              if (guest.paxBreakdown) {
+                  const { regular, disc1, disc2 } = guest.paxBreakdown;
+                  guestLiability += (safeNum(regular) * rates.regular);
+                  guestLiability += (safeNum(disc1) * rates.d1);
+                  guestLiability += (safeNum(disc2) * rates.d2);
+              } else {
+                   const type = guest.seatType || 'regular';
+                   if (type === 'disc1') guestLiability += seats * rates.d1;
+                   else if (type === 'disc2') guestLiability += seats * rates.d2;
+                   else guestLiability += seats * rates.regular;
+              }
           }
 
           totalLiability += guestLiability;
@@ -220,11 +242,11 @@ export const calculateAgencySettlement = (tour: Tour, agency: PartnerAgency) => 
     totalCost: totalLiability + agencyExpenses,
     netAmount,
     totalSeats: agencyGuestCount,
-    rates // These are "blended" rates for display
+    rates 
   };
 };
 
-// Personal Settlement (Updated: Uses detailed breakdown for Income and Cost)
+// Personal Settlement
 export const calculatePersonalSettlement = (tour: Tour, personalData: PersonalData) => {
     if (!tour || !personalData) return { totalPersonalIncome: 0, personalExpenses: 0, totalPersonalCost: 0, netResult: 0, fees: { regFee: 0, d1Fee: 0, d2Fee: 0 } };
 
@@ -235,11 +257,11 @@ export const calculatePersonalSettlement = (tour: Tour, personalData: PersonalDa
 
     const ratesObj = calculateBuyRates(tour);
     
-    // Use calculated rates from ratesObj directly
     const rates = {
         regular: ratesObj.regular,
         d1: ratesObj.d1,
-        d2: ratesObj.d2
+        d2: ratesObj.d2,
+        couple: ratesObj.couplePackageRate
     };
 
     // Income Config
@@ -262,26 +284,35 @@ export const calculatePersonalSettlement = (tour: Tour, personalData: PersonalDa
 
              if (g.isReceived) {
                  // 1. Income Logic
-                 if (g.feeBreakdown) {
-                     const incReg = safeNum(g.feeBreakdown.regular) * regFee;
-                     const incD1 = safeNum(g.feeBreakdown.disc1) * d1Fee;
-                     const incD2 = safeNum(g.feeBreakdown.disc2) * d2Fee;
-                     totalPersonalIncome += (incReg + incD1 + incD2);
+                 if (g.isCouple) {
+                     // Couple uses manual collection or package price
+                     totalPersonalIncome += safeNum(g.collection);
                  } else {
-                    totalPersonalIncome += safeNum(g.collection);
+                     if (g.feeBreakdown) {
+                         const incReg = safeNum(g.feeBreakdown.regular) * regFee;
+                         const incD1 = safeNum(g.feeBreakdown.disc1) * d1Fee;
+                         const incD2 = safeNum(g.feeBreakdown.disc2) * d2Fee;
+                         totalPersonalIncome += (incReg + incD1 + incD2);
+                     } else {
+                        totalPersonalIncome += safeNum(g.collection);
+                     }
                  }
 
                  // 2. Cost Logic
                  let guestCost = 0;
-                 if (g.paxBreakdown) {
-                     const costReg = safeNum(g.paxBreakdown.regular) * rates.regular;
-                     const costD1 = safeNum(g.paxBreakdown.disc1) * rates.d1;
-                     const costD2 = safeNum(g.paxBreakdown.disc2) * rates.d2;
-                     guestCost += (costReg + costD1 + costD2);
+                 if (g.isCouple) {
+                     guestCost = rates.couple;
                  } else {
-                     if (g.seatType === 'disc1') guestCost += seats * rates.d1;
-                     else if (g.seatType === 'disc2') guestCost += seats * rates.d2;
-                     else guestCost += seats * rates.regular;
+                     if (g.paxBreakdown) {
+                         const costReg = safeNum(g.paxBreakdown.regular) * rates.regular;
+                         const costD1 = safeNum(g.paxBreakdown.disc1) * rates.d1;
+                         const costD2 = safeNum(g.paxBreakdown.disc2) * rates.d2;
+                         guestCost += (costReg + costD1 + costD2);
+                     } else {
+                         if (g.seatType === 'disc1') guestCost += seats * rates.d1;
+                         else if (g.seatType === 'disc2') guestCost += seats * rates.d2;
+                         else guestCost += seats * rates.regular;
+                     }
                  }
                  totalPersonalCost += guestCost;
 
@@ -292,7 +323,7 @@ export const calculatePersonalSettlement = (tour: Tour, personalData: PersonalDa
              }
         });
     } else {
-        // Fallback for old data - assume received
+        // Fallback for old data
         const regCount = safeNum(personalData.personalStandardCount);
         const d1Count = safeNum(personalData.personalDisc1Count);
         const d2Count = safeNum(personalData.personalDisc2Count);
