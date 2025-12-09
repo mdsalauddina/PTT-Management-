@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { CommonTabProps, Guest, PersonalData, PartnerAgency } from '../types';
 import { db } from '../services/firebase';
 import { collection, query, where, getDocs, doc, updateDoc, Timestamp, getDoc } from 'firebase/firestore';
-import { ChevronDown, Users, Phone, Armchair, Building, User, Wallet, MessageCircle, Check, X } from 'lucide-react';
+import { ChevronDown, Users, Phone, Armchair, Building, User, Wallet, MessageCircle, Check, X, MapPin } from 'lucide-react';
 import { recalculateTourSeats } from '../utils/calculations';
 
 const HostGuestList: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) => {
@@ -186,13 +186,16 @@ const HostGuestList: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) 
                                       <h4 className="font-bold text-slate-800 text-sm truncate leading-tight mb-1">{guest.name}</h4>
                                       <div className="flex flex-wrap items-center gap-1.5">
                                           {guest.phone ? (
-                                              <div className="flex items-center gap-2 mt-1 mb-2">
-                                                  <a href={`tel:${guest.phone}`} className="text-[10px] text-white font-bold bg-indigo-500 px-3 py-1.5 rounded-lg shadow-sm shadow-indigo-200 hover:bg-indigo-600 transition-all flex items-center gap-1.5">
-                                                      <Phone size={12}/> কল
-                                                  </a>
-                                                  <a href={getWhatsAppLink(guest.phone)} target="_blank" rel="noopener noreferrer" className="text-[10px] text-white font-bold bg-green-500 px-3 py-1.5 rounded-lg shadow-sm shadow-green-200 hover:bg-green-600 transition-all flex items-center gap-1.5">
-                                                      <MessageCircle size={12}/> WA
-                                                  </a>
+                                              <div className="flex flex-wrap items-center gap-2 mt-1 mb-2">
+                                                   <span className="text-[10px] font-bold text-slate-500">{guest.phone}</span>
+                                                   <div className="flex gap-1.5">
+                                                      <a href={`tel:${guest.phone}`} className="text-[10px] text-white font-bold bg-indigo-500 px-2 py-1 rounded-lg shadow-sm shadow-indigo-200 hover:bg-indigo-600 transition-all flex items-center gap-1">
+                                                          <Phone size={10}/> কল
+                                                      </a>
+                                                      <a href={getWhatsAppLink(guest.phone)} target="_blank" rel="noopener noreferrer" className="text-[10px] text-white font-bold bg-green-500 px-2 py-1 rounded-lg shadow-sm shadow-green-200 hover:bg-green-600 transition-all flex items-center gap-1">
+                                                          <MessageCircle size={10}/> WA
+                                                      </a>
+                                                   </div>
                                               </div>
                                           ) : (
                                               <span className="text-[9px] text-slate-400 font-bold bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100 flex items-center gap-1 truncate max-w-full">
@@ -230,11 +233,19 @@ const HostGuestList: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) 
                           <div className="mt-3 flex items-center gap-2 pt-2 border-t border-slate-50/50">
                                 <div className="flex-1 bg-slate-50 rounded-lg p-2 border border-slate-100">
                                     <p className="text-[8px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">সিট</p>
-                                    <div className="flex items-center gap-1">
-                                        <Armchair size={10} className="text-slate-400"/>
-                                        <span className="font-bold text-slate-700 text-[10px] break-all">
-                                            {guest.seatNumbers || 'N/A'} <span className="text-slate-400">({guest.seatCount})</span>
-                                        </span>
+                                    <div className="flex flex-col gap-1">
+                                        <div className="flex items-center gap-1">
+                                            <Armchair size={10} className="text-slate-400"/>
+                                            <span className="font-bold text-slate-700 text-[10px] break-all">
+                                                {guest.seatNumbers || 'N/A'} <span className="text-slate-400">({guest.seatCount})</span>
+                                            </span>
+                                        </div>
+                                        {guest.address && (
+                                            <div className="flex items-center gap-1">
+                                                <MapPin size={10} className="text-slate-400"/>
+                                                <span className="font-bold text-slate-500 text-[9px] truncate">{guest.address}</span>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                                 <div className={`flex-1 rounded-lg p-2 border transition-colors ${isReceived ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>

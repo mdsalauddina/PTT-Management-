@@ -4,7 +4,7 @@ import { CommonTabProps, PersonalData, Guest } from '../types';
 import { db } from '../services/firebase';
 import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
 import { calculatePersonalSettlement, safeNum, recalculateTourSeats } from '../utils/calculations';
-import { Save, PlusCircle, Trash2, Receipt, UserCircle, ChevronDown, Wallet, Users, Phone, Armchair, Settings, Calculator, Tag, MessageCircle } from 'lucide-react';
+import { Save, PlusCircle, Trash2, Receipt, UserCircle, ChevronDown, Wallet, Users, Phone, Armchair, Settings, Calculator, Tag, MessageCircle, MapPin, Heart } from 'lucide-react';
 
 const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
   const [selectedTourId, setSelectedTourId] = useState<string>('');
@@ -32,6 +32,8 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
   const [newGuest, setNewGuest] = useState({
       name: '',
       phone: '',
+      address: '', // Added Address
+      isCouple: false, // Added Couple Flag
       seatNumbers: '',
       // Seat Usage (Cost)
       seatReg: '',
@@ -186,6 +188,8 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
           id: Date.now().toString(),
           name: newGuest.name,
           phone: formattedPhone,
+          address: newGuest.address,
+          isCouple: newGuest.isCouple,
           seatCount: totalSeats,
           seatNumbers: newGuest.seatNumbers,
           unitPrice: 0,
@@ -199,7 +203,7 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
       
       setPersonalData({...personalData, guests: [...(personalData.guests || []), g]});
       setNewGuest({ 
-          name: '', phone: '', seatNumbers: '', 
+          name: '', phone: '', address: '', isCouple: false, seatNumbers: '', 
           seatReg: '', seatD1: '', seatD2: '', 
           feeReg: '', feeD1: '', feeD2: '', 
           manualCollection: '' 
@@ -312,9 +316,14 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
         {isAddingGuest && (
             <div className="p-4 bg-slate-50 border-b border-slate-100 animate-fade-in space-y-3">
                 {/* Basic Info */}
-                <div className="grid grid-cols-5 gap-2">
-                    <input className="col-span-2 p-2 rounded-lg border border-slate-200 text-xs font-bold outline-none focus:border-indigo-400" value={newGuest.name} onChange={e => setNewGuest({...newGuest, name: e.target.value})} placeholder="নাম"/>
-                    <input className="col-span-2 p-2 rounded-lg border border-slate-200 text-xs font-bold outline-none focus:border-indigo-400" value={newGuest.phone} onChange={e => setNewGuest({...newGuest, phone: e.target.value})} placeholder="মোবাইল (01...)"/>
+                <div className="grid grid-cols-2 gap-2">
+                    <input className="col-span-1 p-2 rounded-lg border border-slate-200 text-xs font-bold outline-none focus:border-indigo-400" value={newGuest.name} onChange={e => setNewGuest({...newGuest, name: e.target.value})} placeholder="নাম"/>
+                    <input className="col-span-1 p-2 rounded-lg border border-slate-200 text-xs font-bold outline-none focus:border-indigo-400" value={newGuest.phone} onChange={e => setNewGuest({...newGuest, phone: e.target.value})} placeholder="মোবাইল (01...)"/>
+                    <input className="col-span-2 p-2 rounded-lg border border-slate-200 text-xs font-bold outline-none focus:border-indigo-400" value={newGuest.address} onChange={e => setNewGuest({...newGuest, address: e.target.value})} placeholder="ঠিকানা"/>
+                    <div className="col-span-1 flex items-center gap-2 bg-white px-2 rounded-lg border border-slate-200">
+                         <input type="checkbox" checked={newGuest.isCouple} onChange={e => setNewGuest({...newGuest, isCouple: e.target.checked})} className="w-4 h-4"/>
+                         <label className="text-[10px] font-bold text-pink-500 uppercase">কাপল?</label>
+                    </div>
                     <input className="col-span-1 p-2 rounded-lg border border-slate-200 text-xs font-bold outline-none focus:border-indigo-400" value={newGuest.seatNumbers} onChange={e => setNewGuest({...newGuest, seatNumbers: e.target.value})} placeholder="সিট#"/>
                 </div>
                 
@@ -382,23 +391,33 @@ const PersonalTab: React.FC<CommonTabProps> = ({ user, tours }) => {
                             <div className="flex items-center gap-2 mb-0.5">
                                 <span className="text-[9px] font-bold text-slate-300 w-3">{i+1}.</span>
                                 <p className="font-bold text-slate-700 text-xs truncate">{g.name}</p>
-                            </div>
-                            <div className="flex items-center gap-1.5 ml-5 mb-1.5 mt-1">
-                                {g.phone ? (
-                                    <div className="flex items-center gap-1.5">
-                                        <a href={`tel:${g.phone}`} className="text-[10px] text-white font-bold bg-emerald-500 px-3 py-1.5 rounded-lg shadow-sm hover:bg-emerald-600 transition-all flex items-center gap-1.5" title="Call">
-                                            <Phone size={12}/> Call
-                                        </a>
-                                        <a href={getWhatsAppLink(g.phone)} target="_blank" rel="noopener noreferrer" className="text-[10px] text-white font-bold bg-green-500 px-3 py-1.5 rounded-lg shadow-sm hover:bg-green-600 transition-all flex items-center gap-1.5" title="WhatsApp">
-                                            <MessageCircle size={12}/> WA
-                                        </a>
-                                    </div>
-                                ) : (
-                                    <span className="text-[9px] text-slate-400 font-bold ml-1">No phone</span>
+                                {g.isCouple && (
+                                    <span className="text-[8px] font-bold text-white bg-pink-500 px-1.5 py-0.5 rounded-full flex items-center gap-0.5"><Heart size={8} fill="currentColor"/> Couple</span>
                                 )}
-                                {g.seatNumbers && <span className="text-[9px] text-violet-500 font-bold bg-violet-50 px-1 rounded flex items-center gap-0.5"><Armchair size={8}/> {g.seatNumbers}</span>}
                             </div>
-                            <div className="ml-5 flex gap-2">
+                            <div className="flex flex-col ml-5 gap-1">
+                                {g.phone && (
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="text-[10px] font-bold text-slate-500">{g.phone}</span>
+                                        <div className="flex gap-1.5">
+                                            <a href={`tel:${g.phone}`} className="text-[10px] text-white font-bold bg-emerald-500 px-2 py-1 rounded shadow-sm hover:bg-emerald-600 transition-all flex items-center gap-1" title="Call">
+                                                <Phone size={10}/> Call
+                                            </a>
+                                            <a href={getWhatsAppLink(g.phone)} target="_blank" rel="noopener noreferrer" className="text-[10px] text-white font-bold bg-green-500 px-2 py-1 rounded shadow-sm hover:bg-green-600 transition-all flex items-center gap-1" title="WhatsApp">
+                                                <MessageCircle size={10}/> WA
+                                            </a>
+                                        </div>
+                                    </div>
+                                )}
+                                {g.seatNumbers && <span className="text-[9px] text-violet-500 font-bold bg-violet-50 px-1 rounded flex items-center gap-0.5 w-fit"><Armchair size={8}/> {g.seatNumbers}</span>}
+                                {g.address && (
+                                    <div className="flex items-center gap-1 text-[9px] text-slate-500 font-bold">
+                                        <MapPin size={10} className="text-slate-400"/> {g.address}
+                                    </div>
+                                )}
+                            </div>
+                            
+                            <div className="ml-5 flex gap-2 mt-1.5">
                                 {/* Seat Usage Badge */}
                                 {g.paxBreakdown && (
                                     <div className="flex gap-0.5">

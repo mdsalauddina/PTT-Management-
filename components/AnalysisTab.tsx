@@ -5,7 +5,7 @@ import { CommonTabProps, PersonalData, SettlementStatus } from '../types';
 import { db } from '../services/firebase';
 import { doc, getDoc, collection, query, where, getDocs, updateDoc, Timestamp } from 'firebase/firestore';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from 'recharts';
-import { TrendingUp, Activity, Wallet, Building, Coffee, Car, Utensils, Users, ChevronDown, AlertCircle, Bus, Tags, PlusCircle, TrendingDown, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { TrendingUp, Activity, Wallet, Building, Coffee, Car, Utensils, Users, ChevronDown, AlertCircle, Bus, Tags, PlusCircle, TrendingDown, CheckCircle, XCircle, Clock, Heart } from 'lucide-react';
 import { calculateBusFare, calculateTotalDailyExpenses, calculateTotalOtherFixedCosts, safeNum, calculateBuyRates } from '../utils/calculations';
 
 const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) => {
@@ -13,6 +13,9 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
   const [personalGuestCount, setPersonalGuestCount] = useState<number>(0);
   const [personalCollection, setPersonalCollection] = useState<number>(0);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  
+  // Store Guests locally for accurate Couple Calc in Analysis
+  const [allGuestsReceivedStats, setAllGuestsReceivedStats] = useState({ totalReceived: 0, regularRec: 0, coupleRec: 0 });
 
   // New state for Host Settlement
   const [hostCollection, setHostCollection] = useState<number>(0);
@@ -26,81 +29,97 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
   const activeTour = tours.find(t => t.id === selectedTourId) || null;
 
   useEffect(() => {
-    const fetchPersonalData = async () => {
-        if (!activeTour || !user) return;
+    if (!activeTour) return;
+
+    const fetchAllData = async () => {
         try {
-            const docRef = doc(db, 'personal', `${activeTour.id}_${user.uid}`);
-            const docSnap = await getDoc(docRef);
-            if (docSnap.exists()) {
-                const data = docSnap.data() as PersonalData;
-                const pGuests = data.guests ? data.guests.reduce((sum, g) => sum + (Number(g.seatCount)||1), 0) : 0;
-                
-                let pCollection = 0;
-                const bookingFee = Number(data.bookingFee) || 0;
-                if (data.guests && data.guests.length > 0) {
-                     pCollection = data.guests.reduce((sum, g) => sum + (Number(g.collection)||0), 0) + bookingFee;
-                } else {
-                     const regCount = Number(data.personalStandardCount) || 0;
-                     const d1Count = Number(data.personalDisc1Count) || 0;
-                     const d2Count = Number(data.personalDisc2Count) || 0;
+            // 1. Fetch Personal Data
+            let pGuestsCount = 0;
+            let pCollection = 0;
+            let pReceivedTotal = 0;
+            let pReceivedCouple = 0;
+            let pReceivedRegular = 0;
+
+            const pQuery = query(collection(db, 'personal'), where('tourId', '==', activeTour.id));
+            const pDocs = await getDocs(pQuery);
+            
+            pDocs.forEach(doc => {
+                 const data = doc.data() as PersonalData;
+                 const bookingFee = safeNum(data.bookingFee);
+                 
+                 // Calc Collection & Guests
+                 if (data.guests && data.guests.length > 0) {
+                     data.guests.forEach(g => {
+                         const seats = Number(g.seatCount) || 1;
+                         pGuestsCount += seats;
+                         pCollection += safeNum(g.collection);
+                         
+                         if (g.isReceived) {
+                             pReceivedTotal += seats;
+                             if (g.isCouple) pReceivedCouple += seats;
+                             else pReceivedRegular += seats;
+                         }
+                     });
+                 } else {
+                     // Legacy
+                     const reg = safeNum(data.personalStandardCount);
+                     const d1 = safeNum(data.personalDisc1Count);
+                     const d2 = safeNum(data.personalDisc2Count);
+                     pGuestsCount += (reg + d1 + d2);
+                     // Assuming legacy are regular
+                     pReceivedTotal += (reg + d1 + d2);
+                     pReceivedRegular += (reg + d1 + d2);
+
                      const regFee = Number(activeTour.fees?.regular) || 0;
                      const d1Fee = Number(activeTour.fees?.disc1) || 0;
                      const d2Fee = Number(activeTour.fees?.disc2) || 0;
-                     pCollection = (regCount * regFee) + (d1Count * d1Fee) + (d2Count * d2Fee) + bookingFee;
-                }
-                
-                setPersonalGuestCount(pGuests);
-                setPersonalCollection(pCollection);
-            } else {
-                setPersonalGuestCount(0);
-                setPersonalCollection(0);
+                     pCollection += (reg * regFee) + (d1 * d1Fee) + (d2 * d2Fee);
+                 }
+                 pCollection += bookingFee;
+            });
+            
+            setPersonalGuestCount(pGuestsCount);
+            setPersonalCollection(pCollection);
+
+            // 2. Fetch Agency Data (Already in activeTour)
+            let aReceivedTotal = 0;
+            let aReceivedCouple = 0;
+            let aReceivedRegular = 0;
+            let aCollection = 0;
+            
+            if (activeTour.partnerAgencies) {
+                activeTour.partnerAgencies.forEach(ag => {
+                    if (ag.guests) {
+                        ag.guests.forEach(g => {
+                            const seats = Number(g.seatCount) || 1;
+                            if (g.isReceived) {
+                                aCollection += safeNum(g.collection);
+                                aReceivedTotal += seats;
+                                if (g.isCouple) aReceivedCouple += seats;
+                                else aReceivedRegular += seats;
+                            }
+                        });
+                    }
+                });
             }
+            
+            // Set Host Collection (Total Received Collection from all)
+            setHostCollection(pCollection + aCollection); // Note: This sums ALL collection (Personal + Agency). Is Host responsible for collecting Agency money? 
+            // Correction based on previous logic: Host Settlement = Total Collection (from everyone) - Expenses.
+            // Assuming Host collects everything.
+            
+            setAllGuestsReceivedStats({
+                totalReceived: pReceivedTotal + aReceivedTotal,
+                regularRec: pReceivedRegular + aReceivedRegular,
+                coupleRec: pReceivedCouple + aReceivedCouple
+            });
+
         } catch (e) {
             console.error(e);
         }
     };
-
-    const fetchHostSettlementData = async () => {
-      if (!activeTour) return;
-      try {
-        // Calculate Total Collection (All Personal + All Agencies)
-        const q = query(collection(db, 'personal'), where('tourId', '==', activeTour.id));
-        const snapshot = await getDocs(q);
-        let totalPersonalCol = 0;
-        snapshot.forEach(doc => {
-             const data = doc.data() as PersonalData;
-             totalPersonalCol += safeNum(data.bookingFee);
-             if (data.guests) {
-                 totalPersonalCol += data.guests.reduce((sum, g) => {
-                     // Host Settlement Logic: Count only received
-                     return g.isReceived ? sum + safeNum(g.collection) : sum;
-                 }, 0);
-             } else {
-                 const reg = safeNum(data.personalStandardCount) * safeNum(activeTour.fees?.regular);
-                 const d1 = safeNum(data.personalDisc1Count) * safeNum(activeTour.fees?.disc1);
-                 const d2 = safeNum(data.personalDisc2Count) * safeNum(activeTour.fees?.disc2);
-                 totalPersonalCol += (reg + d1 + d2);
-             }
-        });
-
-        // 2. Fetch All Agency Collection
-        let totalAgencyCol = 0;
-        if (activeTour.partnerAgencies) {
-            totalAgencyCol = activeTour.partnerAgencies.reduce((sum, ag) => {
-                 return sum + (ag.guests ? ag.guests.reduce((gSum, g) => {
-                     return g.isReceived ? gSum + safeNum(g.collection) : gSum;
-                 }, 0) : 0);
-            }, 0);
-        }
-
-        setHostCollection(totalPersonalCol + totalAgencyCol);
-      } catch (err) {
-        console.error("Error fetching host settlement", err);
-      }
-    };
-
-    fetchPersonalData();
-    fetchHostSettlementData();
+    
+    fetchAllData();
   }, [activeTour, user]);
 
   const updateHostSettlementStatus = async (status: SettlementStatus) => {
@@ -163,7 +182,9 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
   // Expenses Breakdown
   const totalBusRent = Number(activeTour.busConfig.totalRent || 0);
   const totalHostFee = Number(activeTour.costs.hostFee || 0);
-  const totalHotelCost = Number(activeTour.costs.hotelCost || 0);
+  const totalHotelCost = Number(activeTour.costs.hotelCost || 0); // Regular
+  const totalCoupleHotelCost = Number(activeTour.costs.coupleHotelCost || 0); // Couple
+  
   const totalOtherFixed = calculateTotalOtherFixedCosts(activeTour);
   
   const totalDailyMeals = activeTour.costs?.dailyExpenses 
@@ -178,11 +199,10 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
     ? activeTour.costs.dailyExpenses.reduce((sum, day) => sum + Number(day.other||0), 0)
     : 0;
 
-  const totalExpenses = totalBusRent + totalHostFee + totalHotelCost + totalOtherFixed + totalDailyMeals + totalDailyTransport + totalDailyExtra;
+  const totalExpenses = totalBusRent + totalHostFee + totalHotelCost + totalCoupleHotelCost + totalOtherFixed + totalDailyMeals + totalDailyTransport + totalDailyExtra;
   const netProfit = totalIncome - totalExpenses;
 
   // Host Settlement Balance
-  // Host Spend = Daily Expenses + Other Fixed + Host's Share of Bus Rent
   const hostBusShare = Math.max(0, totalBusRent - safeNum(activeTour.busConfig?.adminPaidRent));
   const hostSpending = (totalDailyMeals + totalDailyTransport + totalDailyExtra) + totalOtherFixed + hostBusShare;
   
@@ -192,18 +212,16 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
   const isAdminPayer = hostSettlementBalance < 0;
 
   // Per Head Logic:
-  // Use RECEIVED guests as divisor
-  const variableDivisor = (activeTour.totalGuests && activeTour.totalGuests > 0) ? activeTour.totalGuests : 1;
+  // Use Accurate RECEIVED guests as divisor from state
+  const variableDivisor = allGuestsReceivedStats.totalReceived > 0 ? allGuestsReceivedStats.totalReceived : 1;
+  const regularDivisor = allGuestsReceivedStats.regularRec > 0 ? allGuestsReceivedStats.regularRec : 1;
+  const coupleDivisor = allGuestsReceivedStats.coupleRec > 0 ? allGuestsReceivedStats.coupleRec : 1;
+
   const calcPerHeadVariable = (amount: number) => Math.ceil(amount / variableDivisor);
   
-  // Get detailed rates (Reg, D1, D2) and the breakdown
+  // Get detailed rates (Bus Share etc)
   const costPerSeat = calculateBuyRates(activeTour);
-  
-  // Adjusted Rent Logic for Per Head Display (Total Rent - Penalty)
-  // We use this for display breakdown to show effective cost distribution
-  const penaltyAmount = safeNum(activeTour.penaltyAmount) || 500;
-  // Note: calculateBuyRates handles the bus math distribution.
-  const busPerRegular = Math.ceil(costPerSeat.busShare || 0);
+  const busPerRegular = Math.ceil(costPerSeat.regularBus || 0);
 
   const seatData = [
     { name: 'বুকড', value: totalBooked, color: '#6366f1' },
@@ -381,7 +399,7 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
           <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
              <div className="px-5 py-3 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
                  <h3 className="text-[11px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
-                     <Activity size={14} className="text-slate-400"/> খরচের ব্রেকডাউন (Based on {variableDivisor} Received Guests)
+                     <Activity size={14} className="text-slate-400"/> খরচের ব্রেকডাউন (Based on {variableDivisor} Total Received)
                  </h3>
              </div>
              
@@ -405,14 +423,45 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
                             <td className="p-3 text-right font-mono text-slate-500 bg-slate-50/30">
                                 ৳{busPerRegular} 
                                 <span className="text-[8px] opacity-50 block sm:inline sm:ml-1 font-sans">
-                                    (÷{variableDivisor} Rec.)
+                                    (÷{variableDivisor})
                                 </span>
                             </td>
                         </tr>
 
+                        {/* Hotel Regular */}
+                         <tr className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                            <td className="p-3 flex items-center gap-2 whitespace-nowrap">
+                                <div className="w-1.5 h-1.5 rounded-full bg-indigo-600"></div>
+                                হোটেল (Regular)
+                            </td>
+                            <td className="p-3 text-right font-mono text-slate-700">৳{totalHotelCost.toLocaleString()}</td>
+                            <td className="p-3 text-right font-mono text-slate-500 bg-slate-50/30">
+                                ৳{Math.ceil(totalHotelCost / regularDivisor)} 
+                                <span className="text-[8px] opacity-50 block sm:inline sm:ml-1 font-sans">
+                                    (÷{regularDivisor} Reg.)
+                                </span>
+                            </td>
+                        </tr>
+
+                        {/* Hotel Couple */}
+                        {totalCoupleHotelCost > 0 && (
+                             <tr className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors bg-pink-50/20">
+                                <td className="p-3 flex items-center gap-2 whitespace-nowrap">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-pink-600"></div>
+                                    হোটেল (Couple)
+                                </td>
+                                <td className="p-3 text-right font-mono text-slate-700">৳{totalCoupleHotelCost.toLocaleString()}</td>
+                                <td className="p-3 text-right font-mono text-slate-500 bg-slate-50/30">
+                                    ৳{Math.ceil(totalCoupleHotelCost / coupleDivisor)} 
+                                    <span className="text-[8px] opacity-50 block sm:inline sm:ml-1 font-sans">
+                                        (÷{coupleDivisor} Cpl.)
+                                    </span>
+                                </td>
+                            </tr>
+                        )}
+
                         {/* Variable Costs - Divided by Total Guests */}
                         {[
-                            { label: 'হোটেল ভাড়া', total: totalHotelCost, icon: Building, color: 'text-indigo-600' },
                             { label: 'খাবার', total: totalDailyMeals, icon: Utensils, color: 'text-orange-600' },
                             { label: 'লোকাল গাড়ি', total: totalDailyTransport, icon: Car, color: 'text-blue-600' },
                             { label: 'হোস্ট খরচ', total: totalHostFee, icon: Users, color: 'text-teal-600' },
@@ -428,7 +477,7 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
                                 <td className="p-3 text-right font-mono text-slate-500 bg-slate-50/30">
                                     ৳{calcPerHeadVariable(item.total)} 
                                     <span className="text-[8px] opacity-50 block sm:inline sm:ml-1 font-sans">
-                                        (÷{variableDivisor} Rec.)
+                                        (÷{variableDivisor})
                                     </span>
                                 </td>
                             </tr>
@@ -483,11 +532,11 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
                   <div className="flex flex-col gap-1">
                       <div className="flex justify-between items-center text-[9px] font-bold bg-white/60 px-2 py-1.5 rounded-lg border border-violet-100/50">
                           <span className="text-violet-400">বাস ভাড়া</span>
-                          <span className="text-violet-600">৳{costPerSeat.busShare}</span>
+                          <span className="text-violet-600">৳{costPerSeat.regularBus}</span>
                       </div>
                       <div className="flex justify-between items-center text-[9px] font-bold bg-white/60 px-2 py-1.5 rounded-lg border border-violet-100/50">
                           <span className="text-violet-400">অন্যান্য</span>
-                          <span className="text-violet-600">৳{costPerSeat.varShare}</span>
+                          <span className="text-violet-600">৳{costPerSeat.commonVariable}</span>
                       </div>
                   </div>
               </div>
@@ -498,11 +547,11 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
                   <div className="flex flex-col gap-1">
                       <div className="flex justify-between items-center text-[9px] font-bold bg-white/60 px-2 py-1.5 rounded-lg border border-amber-100/50">
                           <span className="text-amber-500/70">বাস ভাড়া</span>
-                          <span className="text-amber-600">৳{costPerSeat.busShare - safeNum(activeTour.busConfig?.discount1Amount)}</span>
+                          <span className="text-amber-600">৳{costPerSeat.d1Bus}</span>
                       </div>
                       <div className="flex justify-between items-center text-[9px] font-bold bg-white/60 px-2 py-1.5 rounded-lg border border-amber-100/50">
                           <span className="text-amber-500/70">অন্যান্য</span>
-                          <span className="text-amber-600">৳{costPerSeat.varShare}</span>
+                          <span className="text-amber-600">৳{costPerSeat.commonVariable}</span>
                       </div>
                   </div>
               </div>
@@ -513,17 +562,17 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
                   <div className="flex flex-col gap-1">
                       <div className="flex justify-between items-center text-[9px] font-bold bg-white/60 px-2 py-1.5 rounded-lg border border-orange-100/50">
                           <span className="text-orange-500/70">বাস ভাড়া</span>
-                          <span className="text-orange-600">৳{costPerSeat.busShare - safeNum(activeTour.busConfig?.discount2Amount)}</span>
+                          <span className="text-orange-600">৳{costPerSeat.d2Bus}</span>
                       </div>
                       <div className="flex justify-between items-center text-[9px] font-bold bg-white/60 px-2 py-1.5 rounded-lg border border-orange-100/50">
                           <span className="text-orange-500/70">অন্যান্য</span>
-                          <span className="text-orange-600">৳{costPerSeat.varShare}</span>
+                          <span className="text-orange-600">৳{costPerSeat.commonVariable}</span>
                       </div>
                   </div>
               </div>
           </div>
           <p className="text-[9px] text-slate-400 mt-3 text-center leading-relaxed">
-              * খরচ = (বাস ভাড়া + ডিসকাউন্ট গ্যাপ) ÷ উপস্থিত গেস্ট + (অন্যান্য খরচ ÷ উপস্থিত গেস্ট)
+              * খরচ = (বাস ভাড়া + ডিসকাউন্ট গ্যাপ) ÷ উপস্থিত গেস্ট + (অন্যান্য খরচ ÷ উপস্থিত গেস্ট) + (হোটেল খরচ)
           </p>
       </div>
 

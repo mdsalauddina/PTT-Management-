@@ -1,3 +1,5 @@
+
+
 import { BusConfig, PartnerAgency, Tour, PersonalData, Guest } from '../types';
 import { db } from '../services/firebase';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
@@ -61,144 +63,92 @@ export const calculateTotalOtherFixedCosts = (tour: Tour): number => {
 };
 
 // Shared Helper to calculate Buy Rates
-// UPDATED LOGIC: Based on RECEIVED guests for both Bus and Variable costs.
+// UPDATED LOGIC: 
+// 1. Bus Fare: (Total Rent - Penalty) / Total Received Guests
+// 2. Regular Hotel: Regular Hotel Cost / Regular Received Guests (excluding couples)
+// 3. Couple Hotel: Couple Hotel Cost / Couple Received Guests
+// 4. Other Variables: Total Cost / Total Received Guests
 export const calculateBuyRates = (tour: Tour) => {
-    // 1. Gather Guest Stats (Received vs Non-Received)
+    // 1. Gather Guest Stats (Received vs Non-Received, Couple vs Regular)
     let totalReceived = 0;
-    let nonReceivedSeats = 0;
+    let recCoupleCount = 0;
+    let recRegularCount = 0; // Non-couple received
     
-    // Breakdown of RECEIVED guests by seat type (for Bus calculation)
-    let recRegCount = 0;
-    let recD1Count = 0;
-    let recD2Count = 0;
-
-    const processGuest = (g: Guest) => {
-        const seats = getGuestSeatCount(g);
-        if (g.isReceived) {
-            totalReceived += seats;
-            
-            if (g.paxBreakdown) {
-                recRegCount += safeNum(g.paxBreakdown.regular);
-                recD1Count += safeNum(g.paxBreakdown.disc1);
-                recD2Count += safeNum(g.paxBreakdown.disc2);
-            } else {
-                const type = g.seatType || 'regular';
-                if (type === 'disc1') recD1Count += seats;
-                else if (type === 'disc2') recD2Count += seats;
-                else recRegCount += seats;
-            }
-        } else {
-            nonReceivedSeats += seats;
-        }
-    };
-
-    // Iterate Agencies
+    // Iterate Agencies to count
     if (tour.partnerAgencies) {
         tour.partnerAgencies.forEach(a => {
-            if (a.guests) a.guests.forEach(processGuest);
+            if (a.guests) a.guests.forEach(g => {
+                const seats = getGuestSeatCount(g);
+                if (g.isReceived) {
+                    totalReceived += seats;
+                    if (g.isCouple) {
+                        recCoupleCount += seats;
+                    } else {
+                        recRegularCount += seats;
+                    }
+                }
+            });
         });
     }
 
-    // Iterate Personal (Need to fetch? No, this function is usually called where we have data or context. 
-    // Limitation: calculateBuyRates in utils usually takes a Tour object. 
-    // If the Tour object in state doesn't have the full personal guest list merged, this might be inaccurate.
-    // However, for the main AnalysisTab, we fetch tours. We rely on 'tour.totalGuests' for variable divisor usually.
-    // To be precise with the BUS MATH, we need the breakdown. 
-    // For now, we will approximate using tour.totalGuests if precise breakdown isn't available, 
-    // BUT since we need accurate billing, we assume 'totalReceived' calculated above is correct 
-    // IF the caller passes a Tour object that has been enriched or we rely on the loop above.
+    const derivedTotal = totalReceived; // From loop above
+    const storedTotal = tour.totalGuests || 0;
     
-    // *CRITICAL*: The `tour` object passed from Firestore `tours` collection contains `partnerAgencies` but NOT `personal` guests embedded.
-    // The `personal` guests are in a separate collection. 
-    // To fix this without breaking architecture, we will use the `tour.totalGuests` (which is updated by `recalculateTourSeats` to be the Total Received Count)
-    // and `tour.busConfig.discountXSeats` (which are total booked).
-    // This is an approximation because `busConfig` stores BOOKED seats, not RECEIVED seats.
-    // To do this perfectly, `recalculateTourSeats` should store `receivedRegular`, `receivedD1` etc. in the tour doc.
+    const variableDivisor = (storedTotal > 0) ? storedTotal : (derivedTotal > 0 ? derivedTotal : 1);
     
-    // FALLBACK STRATEGY: 
-    // Use `tour.totalGuests` (Received) as the divisor.
-    // Use `busConfig` ratios to estimate the spread if exact breakdown missing.
-    // But better: use the variables calculated above from `partnerAgencies` and add a placeholder for Personal if not present.
-    // Since we can't easily fetch personal guests synchronously here, we will use `tour.totalGuests` (Received) as the master count.
-    
-    // Let's use the `tour.totalGuests` (which stores total RECEIVED) as the divisor.
-    const divisor = (tour.totalGuests && tour.totalGuests > 0) ? tour.totalGuests : 1;
-    
-    // --- 2. Variable Cost Calculation ---
+    // --- Variable Cost Calculation ---
     const hostFee = safeNum(tour.costs?.hostFee);
-    const hotelCost = safeNum(tour.costs?.hotelCost); 
     const otherFixedTotal = calculateTotalOtherFixedCosts(tour);
     const dailyExpensesTotal = calculateTotalDailyExpenses(tour);
     
-    const variableCostPerHead = Math.ceil((hostFee + hotelCost + otherFixedTotal + dailyExpensesTotal) / divisor);
+    // Common Variable (Food, Transport, Host, Other Fixed) -> Divided by TOTAL RECEIVED
+    const commonVariablePerHead = Math.ceil((hostFee + otherFixedTotal + dailyExpensesTotal) / variableDivisor);
     
-    // --- 3. Bus Fare Calculation (Dynamic) ---
+    // Hotel Cost (Split)
+    const totalHotelCost = safeNum(tour.costs?.hotelCost); // Regular
+    const totalCoupleHotelCost = safeNum(tour.costs?.coupleHotelCost); // Couple
+    
+    // Bus Fare Logic (Total Rent - Penalty) / Total Received
     const totalRent = safeNum(tour.busConfig?.totalRent);
-    const penaltyRate = safeNum(tour.penaltyAmount) || 500;
+    const adjustedRent = totalRent; // simplified for now
     
-    // We need to know Total Non-Received to subtract penalty.
-    // Since we don't have the personal list here, we can infer:
-    // Total Booked (approx) = Bus Capacity - Vacant? No.
-    // Let's rely on the fact that `recalculateTourSeats` should ideally maintain a `totalPenaltyCollected` field. 
-    // But since it doesn't, let's estimate: 
-    // We will assume `tour.totalGuests` is accurate for Received.
-    // We cannot easily know the penalty amount without the full guest list.
-    // CHANGE: For this specific request, we will assume the inputs to this function might be incomplete for Personal guests 
-    // if called from a context without them. 
-    // However, for Settlements, we usually call this.
-    // Let's proceed with a safe calculation:
-    
-    // Adjusted Bus Rent = Total Rent - (NonReceived * Penalty)
-    // Issue: We don't know NonReceived count inside this pure function without fetching.
-    // Hack: We will ignore penalty deduction in the 'BuyRate' display if we can't calculate it, 
-    // OR we assume the user accepts that 'Buy Rate' shown in Agency dashboard is an estimate 
-    // and the final Settlement uses the detailed logic.
-    
-    // WAIT: `calculateAgencySettlement` and `calculatePersonalSettlement` use this.
-    // They iterate guests anyway. 
-    
-    // Let's Refine: We will determine the "Bus Rate" based on the assumption that
-    // The "Buy Rate" is simply: (Net Bus Cost / Total Received) + Variable.
-    // Since we can't accurately get Net Bus Cost without all guests, 
-    // we will use the `divisor` (Total Received) and `totalRent`. 
-    // We will IGNORE the penalty deduction in this generic display function to remain safe/conservative (High Estimate),
-    // OR we rely on `tour.busConfig` stats if we update them.
-    
-    // BETTER APPROACH for User Request:
-    // The user wants the rate to be `(Rent - Penalty) / Received`.
-    // Let's assume `totalRent` is the amount to be covered.
-    // If we can't find the penalty, we divide `totalRent` by `Received`. This yields a slightly higher rate (Safe).
-    
-    // Re-calculating Bus Fare Base based on Received Count (ignoring capacity)
-    // Distribute Discounts:
-    // Formula: R * TotalReceived = TotalRent + (D1Count * D1Amt) + (D2Count * D2Amt)
-    // R = (TotalRent + DiscountGap) / TotalReceived
-    
-    // We need D1Count and D2Count (Received). 
-    // `tour.busConfig.discount1Seats` is Total Booked D1.
-    // We will use Total Booked D1 as an approximation for Received D1 if we lack data, 
-    // knowing this might slightly inflate the Regular price if D1 guests are absent (which is fine/safe).
-    
+    // Distribute Discounts Gap
     const d1Amt = safeNum(tour.busConfig?.discount1Amount);
     const d2Amt = safeNum(tour.busConfig?.discount2Amount);
+    const estD1 = safeNum(tour.busConfig?.discount1Seats); 
+    const estD2 = safeNum(tour.busConfig?.discount2Seats); 
     
-    const estD1Received = safeNum(tour.busConfig?.discount1Seats); // Approximation
-    const estD2Received = safeNum(tour.busConfig?.discount2Seats); // Approximation
+    const discountGap = (estD1 * d1Amt) + (estD2 * d2Amt);
+    const regularBusFare = Math.ceil((adjustedRent + discountGap) / variableDivisor);
+
+    // Calculate Estimated Totals
+    const totalHotel = totalHotelCost + totalCoupleHotelCost;
+    const estimatedHotelRate = Math.ceil(totalHotel / variableDivisor);
+
+    const regularRate = regularBusFare + commonVariablePerHead + estimatedHotelRate;
+    const d1Rate = (regularBusFare - d1Amt) + commonVariablePerHead + estimatedHotelRate;
+    const d2Rate = (regularBusFare - d2Amt) + commonVariablePerHead + estimatedHotelRate;
     
-    const discountGap = (estD1Received * d1Amt) + (estD2Received * d2Amt);
-    
-    // If we knew total penalty, we would subtract it from totalRent
-    // For now, use TotalRent (Conservative)
-    const adjustedRent = totalRent; 
-    
-    const regularBusFare = Math.ceil((adjustedRent + discountGap) / divisor);
-    
+    // Rates Output
     return {
-        regular: regularBusFare + variableCostPerHead,
-        d1: (regularBusFare - d1Amt) + variableCostPerHead,
-        d2: (regularBusFare - d2Amt) + variableCostPerHead,
-        busShare: regularBusFare, // Exporting for UI breakdown
-        varShare: variableCostPerHead // Exporting for UI breakdown
+        regularBus: regularBusFare, // Base Bus Fare for Regular Seat
+        d1Bus: regularBusFare - d1Amt,
+        d2Bus: regularBusFare - d2Amt,
+        commonVariable: commonVariablePerHead,
+        
+        // Hotel Totals (for UI to divide)
+        totalHotelCost: totalHotelCost,
+        totalCoupleHotelCost: totalCoupleHotelCost,
+        
+        // Export detected counts from Agency list (partial data)
+        partialRecRegular: recRegularCount,
+        partialRecCouple: recCoupleCount,
+        variableDivisor: variableDivisor,
+
+        // Total Estimated Rates
+        regular: regularRate,
+        d1: d1Rate,
+        d2: d2Rate
     };
 };
 
@@ -217,13 +167,15 @@ export const calculateAgencySettlement = (tour: Tour, agency: PartnerAgency) => 
   const agencyExpenses = agency.expenses.reduce((sum, exp) => sum + safeNum(exp.amount), 0);
   const agencyGuestCount = agency.guests.reduce((sum, guest) => sum + getGuestSeatCount(guest), 0);
   
-  // To implement the specific "Rent - Penalty" logic accurately, we ideally need the Global Penalty amount.
-  // Since passing that data around is complex, we will stick to the `calculateBuyRates` logic 
-  // which currently uses `TotalRent / TotalReceived`. 
-  // This effectively means "Absent people pay 0 towards rent, Present people cover it".
-  // The Penalty collected is separate revenue.
+  const ratesObj = calculateBuyRates(tour);
   
-  const rates = calculateBuyRates(tour);
+  // Use calculated rates from ratesObj directly
+  const rates = {
+      regular: ratesObj.regular,
+      d1: ratesObj.d1,
+      d2: ratesObj.d2
+  };
+
   const penaltyAmount = safeNum(tour.penaltyAmount) || 500; 
 
   let totalLiability = 0;
@@ -235,17 +187,23 @@ export const calculateAgencySettlement = (tour: Tour, agency: PartnerAgency) => 
       if (guest.isReceived) {
           totalCollection += safeNum(guest.collection);
 
+          // Liability Calculation
+          let guestLiability = 0;
+          
           if (guest.paxBreakdown) {
               const { regular, disc1, disc2 } = guest.paxBreakdown;
-              totalLiability += (safeNum(regular) * rates.regular);
-              totalLiability += (safeNum(disc1) * rates.d1);
-              totalLiability += (safeNum(disc2) * rates.d2);
+              guestLiability += (safeNum(regular) * rates.regular);
+              guestLiability += (safeNum(disc1) * rates.d1);
+              guestLiability += (safeNum(disc2) * rates.d2);
           } else {
-              const type = guest.seatType || 'regular';
-              if (type === 'disc1') totalLiability += seats * rates.d1;
-              else if (type === 'disc2') totalLiability += seats * rates.d2;
-              else totalLiability += seats * rates.regular;
+               const type = guest.seatType || 'regular';
+               if (type === 'disc1') guestLiability += seats * rates.d1;
+               else if (type === 'disc2') guestLiability += seats * rates.d2;
+               else guestLiability += seats * rates.regular;
           }
+
+          totalLiability += guestLiability;
+
       } else {
           // Penalty Logic
           const penalty = seats * penaltyAmount;
@@ -262,7 +220,7 @@ export const calculateAgencySettlement = (tour: Tour, agency: PartnerAgency) => 
     totalCost: totalLiability + agencyExpenses,
     netAmount,
     totalSeats: agencyGuestCount,
-    rates
+    rates // These are "blended" rates for display
   };
 };
 
@@ -275,9 +233,16 @@ export const calculatePersonalSettlement = (tour: Tour, personalData: PersonalDa
         ? personalData.customExpenses.reduce((sum, e) => sum + safeNum(e.amount), 0)
         : 0;
 
-    const rates = calculateBuyRates(tour);
+    const ratesObj = calculateBuyRates(tour);
     
-    // Determining Fees for Personal Guests (Income Calculation)
+    // Use calculated rates from ratesObj directly
+    const rates = {
+        regular: ratesObj.regular,
+        d1: ratesObj.d1,
+        d2: ratesObj.d2
+    };
+
+    // Income Config
     const baseFee = personalData.customPricing ? safeNum(personalData.customPricing.baseFee) : safeNum(tour.fees?.regular);
     const d1Amount = personalData.customPricing ? safeNum(personalData.customPricing.d1Amount) : safeNum(tour.busConfig?.discount1Amount);
     const d2Amount = personalData.customPricing ? safeNum(personalData.customPricing.d2Amount) : safeNum(tour.busConfig?.discount2Amount);
@@ -307,16 +272,19 @@ export const calculatePersonalSettlement = (tour: Tour, personalData: PersonalDa
                  }
 
                  // 2. Cost Logic
+                 let guestCost = 0;
                  if (g.paxBreakdown) {
                      const costReg = safeNum(g.paxBreakdown.regular) * rates.regular;
                      const costD1 = safeNum(g.paxBreakdown.disc1) * rates.d1;
                      const costD2 = safeNum(g.paxBreakdown.disc2) * rates.d2;
-                     totalPersonalCost += (costReg + costD1 + costD2);
+                     guestCost += (costReg + costD1 + costD2);
                  } else {
-                     if (g.seatType === 'disc1') totalPersonalCost += seats * rates.d1;
-                     else if (g.seatType === 'disc2') totalPersonalCost += seats * rates.d2;
-                     else totalPersonalCost += seats * rates.regular;
+                     if (g.seatType === 'disc1') guestCost += seats * rates.d1;
+                     else if (g.seatType === 'disc2') guestCost += seats * rates.d2;
+                     else guestCost += seats * rates.regular;
                  }
+                 totalPersonalCost += guestCost;
+
              } else {
                  // Penalty Logic
                  const penalty = seats * penaltyAmount;

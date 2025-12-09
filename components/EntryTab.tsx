@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../services/firebase';
 import { collection, addDoc, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { Tour, CommonTabProps, BusConfig, DailyExpense } from '../types';
-import { Plus, Edit2, DollarSign, Bus, Settings, MapPin, Save, ArrowLeft, Trash2, Clock, Utensils, UserPlus, User, Loader, Building, ChevronDown, PlusCircle, AlertTriangle } from 'lucide-react';
+import { Plus, Edit2, DollarSign, Bus, Settings, MapPin, Save, ArrowLeft, Trash2, Clock, Utensils, UserPlus, User, Loader, Building, ChevronDown, PlusCircle, AlertTriangle, Heart } from 'lucide-react';
 import { calculateBusFare } from '../utils/calculations';
 
 // UI Helpers - Compact & Refined
@@ -68,6 +68,7 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
       perHead: 1000,
       hostFee: 0,
       hotelCost: 0,
+      coupleHotelCost: 0,
       otherFixedCosts: [],
       dailyExpenses: []
     }
@@ -506,12 +507,17 @@ const EntryTab: React.FC<CommonTabProps> = ({ user, allUsers, tours, refreshTour
                                 হোস্ট দিবে: <span className="text-slate-600">৳{hostPayableRent.toLocaleString()}</span> (কালেকশন থেকে)
                             </div>
 
-                            <InputGroup label="মোট হোটেল">
+                            <InputGroup label="মোট হোটেল (Regular)">
                                 <StyledInput type="number" className="font-bold text-rose-600 bg-rose-50/30" value={tourData.costs?.hotelCost} onChange={(e: any) => setTourData({...tourData, costs: {...tourData.costs!, hotelCost: safeNumInput(e)}})} />
                             </InputGroup>
-                            <InputGroup label="হোস্ট স্যালারি">
-                                <StyledInput type="number" value={tourData.costs?.hostFee} onChange={(e: any) => setTourData({...tourData, costs: {...tourData.costs!, hostFee: safeNumInput(e)}})} />
+                             <InputGroup label="কাপল হোটেল খরচ (Total)">
+                                <StyledInput type="number" className="font-bold text-pink-600 bg-pink-50/30" value={tourData.costs?.coupleHotelCost} onChange={(e: any) => setTourData({...tourData, costs: {...tourData.costs!, coupleHotelCost: safeNumInput(e)}})} />
                             </InputGroup>
+                            <div className="col-span-2">
+                                <InputGroup label="হোস্ট স্যালারি">
+                                    <StyledInput type="number" value={tourData.costs?.hostFee} onChange={(e: any) => setTourData({...tourData, costs: {...tourData.costs!, hostFee: safeNumInput(e)}})} />
+                                </InputGroup>
+                            </div>
                         </div>
                         
                         <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">

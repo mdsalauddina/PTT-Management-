@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Tour, UserProfile, Guest, PartnerAgency, SettlementStatus } from '../types';
 import { db } from '../services/firebase';
 import { doc, updateDoc, Timestamp } from 'firebase/firestore';
-import { ChevronDown, LogOut, Users, Plus, Phone, Info, Star, Calendar, History, Wallet, LayoutGrid, Sparkles, Briefcase, Armchair, Tag, Clock, MapPin, X, CheckCircle, Calculator, MessageCircle, XCircle, Activity } from 'lucide-react';
+import { ChevronDown, LogOut, Users, Plus, Phone, Info, Star, Calendar, History, Wallet, LayoutGrid, Sparkles, Briefcase, Armchair, Tag, Clock, MapPin, X, CheckCircle, Calculator, MessageCircle, XCircle, Activity, Heart } from 'lucide-react';
 import { calculateAgencySettlement, calculateBusFare, calculateTotalOtherFixedCosts, safeNum, recalculateTourSeats, calculateBuyRates } from '../utils/calculations';
 
 interface AgencyDashboardProps {
@@ -21,7 +21,16 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
   // Booking Modal State
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [targetTour, setTargetTour] = useState<Tour | null>(null);
-  const [newBooking, setNewBooking] = useState({ name: '', phone: '', seatCount: '', unitPrice: '', seatNumbers: '' });
+  // Updated state to include address and isCouple
+  const [newBooking, setNewBooking] = useState({ 
+      name: '', 
+      phone: '', 
+      address: '', 
+      isCouple: false, 
+      seatCount: '', 
+      unitPrice: '', 
+      seatNumbers: '' 
+  });
 
   const getLocalDateString = () => {
     const d = new Date();
@@ -108,7 +117,7 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
 
       // Bus Share (consistent with buy rate calculation)
       const rates = calculateBuyRates(tour);
-      const busShare = rates.busShare || 0;
+      const busShare = rates.regularBus || 0;
       const totalBusRent = safeNum(tour.busConfig?.totalRent);
 
       // Per Head Calc
@@ -148,7 +157,7 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
 
   const openBookingModal = (tour: Tour) => {
       setTargetTour(tour);
-      setNewBooking({ name: '', phone: '', seatCount: '', unitPrice: '', seatNumbers: '' });
+      setNewBooking({ name: '', phone: '', address: '', isCouple: false, seatCount: '', unitPrice: '', seatNumbers: '' });
       setIsBookingModalOpen(true);
   };
 
@@ -193,6 +202,8 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
           id: `g_${Date.now()}`,
           name: newBooking.name,
           phone: formattedPhone,
+          address: newBooking.address,
+          isCouple: newBooking.isCouple,
           seatCount: seatCount,
           unitPrice: unitPrice,
           collection: seatCount * unitPrice,
@@ -248,8 +259,6 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
   };
 
   const settlementStatus = myAgencyData?.settlementStatus || 'unpaid';
-  // If Net Amount > 0: Agency Owes Admin (Agency Pays)
-  // If Net Amount < 0: Admin Owes Agency (Agency Receives)
   const isAgencyPayer = (settlement?.netAmount || 0) >= 0;
 
   return (
@@ -568,24 +577,35 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
                                                 </div>
                                                 <div>
                                                     <p className="font-bold text-slate-800 text-xs">{guest.name}</p>
-                                                    <div className="flex items-center gap-2 mt-2">
-                                                        {guest.phone ? (
-                                                            <div className="flex items-center gap-1.5">
-                                                                <a href={`tel:${guest.phone}`} className="text-[10px] text-white font-bold bg-emerald-500 px-3 py-1.5 rounded-lg shadow-sm hover:bg-emerald-600 transition-all flex items-center gap-1.5" title="Call">
-                                                                    <Phone size={12}/> Call
-                                                                </a>
-                                                                <a href={getWhatsAppLink(guest.phone)} target="_blank" rel="noopener noreferrer" className="text-[10px] text-white font-bold bg-green-500 px-3 py-1.5 rounded-lg shadow-sm hover:bg-green-600 transition-all flex items-center gap-1.5" title="WhatsApp">
-                                                                    <MessageCircle size={12}/> WA
-                                                                </a>
+                                                    {guest.isCouple && (
+                                                        <span className="text-[8px] font-bold text-white bg-pink-500 px-1.5 py-0.5 rounded-full flex items-center gap-0.5 mt-0.5 w-fit"><Heart size={8} fill="currentColor"/> Couple</span>
+                                                    )}
+                                                    <div className="flex flex-col gap-1 mt-1">
+                                                        {guest.phone && (
+                                                            <div className="flex flex-wrap items-center gap-2">
+                                                                <span className="text-[10px] font-bold text-slate-500">{guest.phone}</span>
+                                                                <div className="flex gap-1">
+                                                                    <a href={`tel:${guest.phone}`} className="text-[9px] text-white font-bold bg-emerald-500 px-2 py-1 rounded shadow-sm hover:bg-emerald-600 transition-all flex items-center gap-1" title="Call">
+                                                                        <Phone size={10}/> Call
+                                                                    </a>
+                                                                    <a href={getWhatsAppLink(guest.phone)} target="_blank" rel="noopener noreferrer" className="text-[9px] text-white font-bold bg-green-500 px-2 py-1 rounded shadow-sm hover:bg-green-600 transition-all flex items-center gap-1" title="WhatsApp">
+                                                                        <MessageCircle size={10}/> WA
+                                                                    </a>
+                                                                </div>
                                                             </div>
-                                                        ) : (
-                                                            <span className="text-[9px] text-slate-400 font-bold ml-1 flex items-center gap-1"><Phone size={8}/> N/A</span>
                                                         )}
-                                                        {guest.seatNumbers && (
-                                                            <span className="text-[9px] text-violet-600 font-bold bg-violet-50 px-1.5 py-0.5 rounded border border-violet-100 ml-1">
-                                                                {guest.seatNumbers}
-                                                            </span>
+                                                        {guest.address && (
+                                                            <div className="flex items-center gap-1 text-[9px] text-slate-500 font-bold">
+                                                                <MapPin size={10} className="text-slate-400"/> {guest.address}
+                                                            </div>
                                                         )}
+                                                        <div className="flex gap-1.5">
+                                                            {guest.seatNumbers && (
+                                                                <span className="text-[9px] text-violet-600 font-bold bg-violet-50 px-1.5 py-0.5 rounded border border-violet-100 flex items-center gap-0.5">
+                                                                    <Armchair size={8}/> {guest.seatNumbers}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -638,6 +658,22 @@ const AgencyDashboard: React.FC<AgencyDashboardProps> = ({ user, tours, refreshT
                             placeholder="01..."
                           />
                       </div>
+                       {/* NEW: Address Field */}
+                       <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">ঠিকানা</label>
+                          <input 
+                            value={newBooking.address}
+                            onChange={e => setNewBooking({...newBooking, address: e.target.value})}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-300"
+                            placeholder="ঠিকানা"
+                          />
+                      </div>
+                       {/* NEW: Couple Checkbox */}
+                       <div className="flex items-center gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                             <input type="checkbox" checked={newBooking.isCouple} onChange={e => setNewBooking({...newBooking, isCouple: e.target.checked})} className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"/>
+                             <label className="text-[10px] font-bold text-pink-500 uppercase flex items-center gap-1"><Heart size={10}/> কাপল প্যাকেজ?</label>
+                       </div>
+
                       <div className="space-y-1">
                           <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">সিট নম্বর</label>
                           <input 

@@ -40,7 +40,8 @@ export interface DailyExpense {
 export interface TourCosts {
   perHead: number;
   hostFee: number;
-  hotelCost: number; // Added field for total hotel cost
+  hotelCost: number; // Regular/General Hotel Cost
+  coupleHotelCost?: number; // Added: Specific cost for couple rooms
   otherFixedCosts: { id: string; name: string; amount: number }[]; // Added dynamic extra fixed costs
   dailyExpenses: DailyExpense[];
 }
@@ -49,12 +50,14 @@ export interface Guest {
   id: string;
   name: string;
   phone: string;
+  address?: string; // Added: Guest Address
   seatCount: number; // Number of seats for this group
   seatNumbers?: string; // Added seat numbers (e.g., "A1, A2")
   unitPrice: number; // Per seat collection amount
   collection: number; // Total collection (seatCount * unitPrice)
   seatType: 'regular' | 'disc1' | 'disc2'; // Kept for backward compatibility/default
   isReceived?: boolean; // New field: true if guest has arrived, false/undefined if pending
+  isCouple?: boolean; // Added: Flag to identify couple package guests
   
   // Seat Usage (Determines Cost/Liability)
   paxBreakdown?: {
