@@ -178,17 +178,18 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
   const hostSettlementBalance = hostCollection - hostSpending;
   const hostStatus = activeTour.hostSettlementStatus || 'unpaid';
 
-  // Logic: 
-  // Net > 0: Host Owes Admin. Admin is Payee.
-  // Net < 0: Admin Owes Host. Admin is Payer.
   const isAdminPayer = hostSettlementBalance < 0;
 
   // Per Head Logic:
-  const variableDivisor = totalBooked > 0 ? totalBooked : 1;
+  // Use RECEIVED guests as divisor
+  const variableDivisor = (activeTour.totalGuests && activeTour.totalGuests > 0) ? activeTour.totalGuests : 1;
   const calcPerHeadVariable = (amount: number) => Math.ceil(amount / variableDivisor);
-  const calcPerHeadBus = (amount: number) => Math.ceil(amount / (totalSeats > 0 ? totalSeats : 1));
+  
+  // Get detailed rates (Reg, D1, D2) and the breakdown
   const costPerSeat = calculateBuyRates(activeTour);
-  const busFares = calculateBusFare(activeTour.busConfig);
+  
+  // NOTE: busShare from calculateBuyRates includes the Rent adjustment math
+  const busPerRegular = Math.ceil(costPerSeat.busShare || 0);
 
   const seatData = [
     { name: 'বুকড', value: totalBooked, color: '#6366f1' },
@@ -240,6 +241,9 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
                 <div className="flex gap-1.5 mt-2 flex-wrap">
                     <span className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 font-bold whitespace-nowrap">এজেন্সি: {agencyGuests}</span>
                     <span className="text-[9px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded border border-purple-100 font-bold whitespace-nowrap">নিজস্ব: {personalGuestCount}</span>
+                </div>
+                <div className="mt-2 text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100 inline-block">
+                    উপস্থিত (Received): {variableDivisor}
                 </div>
             </div>
             <div className="w-16 h-16 relative shrink-0">
@@ -363,7 +367,7 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
           <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
              <div className="px-5 py-3 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
                  <h3 className="text-[11px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
-                     <Activity size={14} className="text-slate-400"/> খরচের ব্রেকডাউন
+                     <Activity size={14} className="text-slate-400"/> খরচের ব্রেকডাউন (Based on {variableDivisor} Received Guests)
                  </h3>
              </div>
              
@@ -377,17 +381,17 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
                         </tr>
                     </thead>
                     <tbody className="text-xs font-bold text-slate-600">
-                        {/* Bus Rent - Divided by Total Seats (Capacity) */}
+                        {/* Bus Rent - Divided by Received Guests */}
                         <tr className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
                             <td className="p-3 flex items-center gap-2 whitespace-nowrap">
                                 <div className="w-1.5 h-1.5 rounded-full bg-violet-600"></div>
-                                বাস ভাড়া
+                                বাস ভাড়া (Base)
                             </td>
                             <td className="p-3 text-right font-mono text-slate-700">৳{totalBusRent.toLocaleString()}</td>
                             <td className="p-3 text-right font-mono text-slate-500 bg-slate-50/30">
-                                ৳{calcPerHeadBus(totalBusRent)} 
+                                ৳{busPerRegular} 
                                 <span className="text-[8px] opacity-50 block sm:inline sm:ml-1 font-sans">
-                                    (÷{totalSeats} Seats)
+                                    (÷{variableDivisor} Rec.)
                                 </span>
                             </td>
                         </tr>
@@ -410,7 +414,7 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
                                 <td className="p-3 text-right font-mono text-slate-500 bg-slate-50/30">
                                     ৳{calcPerHeadVariable(item.total)} 
                                     <span className="text-[8px] opacity-50 block sm:inline sm:ml-1 font-sans">
-                                        (÷{variableDivisor} Guests)
+                                        (÷{variableDivisor} Rec.)
                                     </span>
                                 </td>
                             </tr>
@@ -465,11 +469,11 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
                   <div className="flex flex-col gap-1">
                       <div className="flex justify-between items-center text-[9px] font-bold bg-white/60 px-2 py-1.5 rounded-lg border border-violet-100/50">
                           <span className="text-violet-400">বাস ভাড়া</span>
-                          <span className="text-violet-600">৳{busFares.regularFare}</span>
+                          <span className="text-violet-600">৳{costPerSeat.busShare}</span>
                       </div>
                       <div className="flex justify-between items-center text-[9px] font-bold bg-white/60 px-2 py-1.5 rounded-lg border border-violet-100/50">
                           <span className="text-violet-400">অন্যান্য</span>
-                          <span className="text-violet-600">৳{costPerSeat.regular - busFares.regularFare}</span>
+                          <span className="text-violet-600">৳{costPerSeat.varShare}</span>
                       </div>
                   </div>
               </div>
@@ -480,11 +484,11 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
                   <div className="flex flex-col gap-1">
                       <div className="flex justify-between items-center text-[9px] font-bold bg-white/60 px-2 py-1.5 rounded-lg border border-amber-100/50">
                           <span className="text-amber-500/70">বাস ভাড়া</span>
-                          <span className="text-amber-600">৳{busFares.discount1Fare}</span>
+                          <span className="text-amber-600">৳{costPerSeat.busShare - safeNum(activeTour.busConfig?.discount1Amount)}</span>
                       </div>
                       <div className="flex justify-between items-center text-[9px] font-bold bg-white/60 px-2 py-1.5 rounded-lg border border-amber-100/50">
                           <span className="text-amber-500/70">অন্যান্য</span>
-                          <span className="text-amber-600">৳{costPerSeat.d1 - busFares.discount1Fare}</span>
+                          <span className="text-amber-600">৳{costPerSeat.varShare}</span>
                       </div>
                   </div>
               </div>
@@ -495,17 +499,17 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
                   <div className="flex flex-col gap-1">
                       <div className="flex justify-between items-center text-[9px] font-bold bg-white/60 px-2 py-1.5 rounded-lg border border-orange-100/50">
                           <span className="text-orange-500/70">বাস ভাড়া</span>
-                          <span className="text-orange-600">৳{busFares.discount2Fare}</span>
+                          <span className="text-orange-600">৳{costPerSeat.busShare - safeNum(activeTour.busConfig?.discount2Amount)}</span>
                       </div>
                       <div className="flex justify-between items-center text-[9px] font-bold bg-white/60 px-2 py-1.5 rounded-lg border border-orange-100/50">
                           <span className="text-orange-500/70">অন্যান্য</span>
-                          <span className="text-orange-600">৳{costPerSeat.d2 - busFares.discount2Fare}</span>
+                          <span className="text-orange-600">৳{costPerSeat.varShare}</span>
                       </div>
                   </div>
               </div>
           </div>
           <p className="text-[9px] text-slate-400 mt-3 text-center leading-relaxed">
-              * খরচ = বাস ভাড়া (ফিক্সড) + (অন্যান্য খরচ ÷ মোট গেস্ট)
+              * খরচ = (বাস ভাড়া + ডিসকাউন্ট গ্যাপ) ÷ উপস্থিত গেস্ট + (অন্যান্য খরচ ÷ উপস্থিত গেস্ট)
           </p>
       </div>
 
