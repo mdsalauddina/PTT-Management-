@@ -3,7 +3,7 @@ import { CommonTabProps, PersonalData, SettlementStatus } from '../types';
 import { db } from '../services/firebase';
 import { doc, getDoc, collection, query, where, getDocs, updateDoc, Timestamp } from 'firebase/firestore';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from 'recharts';
-import { TrendingUp, Activity, Wallet, Building, Coffee, Car, Utensils, Users, ChevronDown, AlertCircle, Bus, Tags, PlusCircle, TrendingDown, CheckCircle, XCircle, Clock, Heart } from 'lucide-react';
+import { TrendingUp, Activity, Wallet, Building, Coffee, Car, Utensils, Users, ChevronDown, AlertCircle, Bus, Tags, PlusCircle, TrendingDown, CheckCircle, XCircle, Clock, Heart, BarChart3 } from 'lucide-react';
 import { calculateBusFare, calculateTotalDailyExpenses, calculateTotalOtherFixedCosts, safeNum, calculateBuyRates } from '../utils/calculations';
 
 const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) => {
@@ -144,7 +144,13 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
       }
   };
 
-  if (!activeTour) return <div className="h-full flex flex-col items-center justify-center p-10 text-center text-slate-400">...</div>;
+  if (!activeTour) return (
+      <div className="h-full flex flex-col items-center justify-center p-10 text-center text-slate-400">
+         <BarChart3 size={32} className="mb-2 opacity-50"/>
+         <p className="font-bold text-xs">কোন ট্যুর ডাটা পাওয়া যায়নি</p>
+      </div>
+  );
+  
   if (!activeTour.busConfig || !activeTour.costs) return <div className="p-6 text-center text-rose-500 bg-rose-50 rounded-2xl border border-rose-100 text-xs font-bold">Incomplete Config</div>;
 
   // --- CALCULATIONS ---
@@ -213,9 +219,28 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
 
   return (
     <div className="space-y-4 animate-fade-in pb-20 max-w-5xl mx-auto font-sans text-slate-800">
-      {/* ... (Header and Top Stats remain same) ... */}
       
-      {/* ... (Host Settlement Card remains same) ... */}
+      {/* Selector */}
+      <div className="bg-white p-2.5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3 relative z-20">
+        <div className="p-2 bg-indigo-50 rounded-xl text-indigo-600">
+            <BarChart3 size={18} />
+        </div>
+        <div className="flex-1 min-w-0">
+            <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 truncate">এনালাইসিস রিপোর্ট</label>
+            <div className="relative">
+                <select 
+                    value={selectedTourId}
+                    onChange={(e) => setSelectedTourId(e.target.value)}
+                    className="w-full appearance-none bg-transparent text-slate-800 text-sm font-black focus:outline-none cursor-pointer pr-6 py-1 truncate"
+                >
+                    {tours.map(t => <option key={t.id} value={t.id}>{t.name} ({t.date})</option>)}
+                </select>
+                <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={12} strokeWidth={2.5} />
+            </div>
+        </div>
+      </div>
+      
+      {/* Host Settlement Card */}
       <div className={`p-5 rounded-2xl border shadow-sm flex flex-col gap-4 ${hostSettlementBalance >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-orange-50 border-orange-100'}`}>
           {/* ... */}
            <div className="flex flex-col sm:flex-row justify-between items-center gap-4">

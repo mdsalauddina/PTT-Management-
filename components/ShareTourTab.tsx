@@ -109,7 +109,8 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
           seatCount: seatCount,
           seatNumbers: newBooking.seatNumbers,
           unitPrice: seatCount > 0 ? Math.round(totalAmount / seatCount) : 0, 
-          collection: totalAmount, // Fixed amount (not multiplied)
+          collection: 0, // Initialized to 0 (Due status)
+          totalBillAmount: totalAmount, // Fixed amount
           seatType: 'regular',
           paxBreakdown: {
               regular: seatCount,
@@ -487,7 +488,38 @@ const ShareTourTab: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) =
                                                 
                                                 <div className="flex flex-col items-end gap-2">
                                                     <div className="text-right">
-                                                        <p className="font-mono font-black text-emerald-600 text-xs">৳{guest.collection.toLocaleString()}</p>
+                                                        {(() => {
+                                                            const isReceived = guest.isReceived;
+                                                            let label = isReceived ? 'Paid' : 'Due';
+                                                            let amount = 0;
+                                                            let color = isReceived ? 'text-emerald-600' : 'text-rose-600';
+                                                            let labelColor = isReceived ? 'text-emerald-400' : 'text-rose-400';
+
+                                                            if (guest.totalBillAmount !== undefined) {
+                                                                // New System Logic
+                                                                const bill = guest.totalBillAmount;
+                                                                const paid = safeNum(guest.collection);
+                                                                const due = Math.max(0, bill - paid);
+                                                                
+                                                                if (isReceived) {
+                                                                    amount = paid;
+                                                                } else {
+                                                                    amount = due;
+                                                                    // If not received, it's Due. If partial payment exists but not marked received, it shows remaining due.
+                                                                    // If amount is 0 and status is due (e.g. bill 0), it shows Due 0.
+                                                                }
+                                                            } else {
+                                                                // Legacy Logic
+                                                                amount = safeNum(guest.collection);
+                                                            }
+                                                            
+                                                            return (
+                                                                <>
+                                                                    <p className={`text-[9px] font-bold uppercase ${labelColor} mb-0.5`}>{label}</p>
+                                                                    <p className={`font-mono font-black text-xs ${color}`}>৳{amount.toLocaleString()}</p>
+                                                                </>
+                                                            );
+                                                        })()}
                                                     </div>
 
                                                     <div className="flex items-center gap-1">

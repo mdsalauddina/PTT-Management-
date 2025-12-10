@@ -212,8 +212,13 @@ const HostGuestList: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) 
                       const isProcessing = processingId === guest.id;
                       const isAgency = guest.type === 'agency';
                       
-                      // For List View, show "Paid" (Collection) amount as usual
-                      const collectionAmount = Number(guest.collection || 0);
+                      // Calculate financial stats for this guest
+                      const { paidAmount, dueAmount } = getGuestCalculations(guest, activeTour);
+                      
+                      // Display Logic: 
+                      // If Received (Paid), show Paid Amount.
+                      // If Not Received (Due/Pending), show Due Amount.
+                      const displayAmount = isReceived ? paidAmount : dueAmount;
 
                       return (
                       <div 
@@ -305,7 +310,7 @@ const HostGuestList: React.FC<CommonTabProps> = ({ user, tours, refreshTours }) 
                                     <div className="flex items-center gap-1">
                                         <Wallet size={10} className={isReceived ? "text-emerald-400" : "text-rose-400"}/>
                                         <span className={`font-mono font-black text-[10px] ${isReceived ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                            ৳{collectionAmount.toLocaleString()}
+                                            ৳{displayAmount.toLocaleString()}
                                         </span>
                                     </div>
                                 </div>
