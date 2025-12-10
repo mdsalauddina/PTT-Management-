@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, PersonalData, SettlementStatus } from '../types';
 import { db } from '../services/firebase';
@@ -20,6 +19,23 @@ const HostSettlement: React.FC<CommonTabProps> = ({ user, tours, refreshTours })
 
   const activeTour = tours.find(t => t.id === selectedTourId) || null;
 
+  // Calculate Agency Collection (Sync from props)
+  let agencyCollection = 0;
+  if (activeTour && activeTour.partnerAgencies) {
+      agencyCollection = activeTour.partnerAgencies.reduce((sum, agency) => {
+          const agencyTotal = agency.guests ? agency.guests.reduce((gSum, g) => {
+              if (g.isReceived) {
+                  const collected = safeNum(g.collection);
+                  const totalBill = safeNum(g.totalBillAmount);
+                  // If collection is 0 but confirmed received, assume full bill was collected (Due Taka)
+                  return gSum + (collected > 0 ? collected : totalBill);
+              }
+              return gSum;
+          }, 0) : 0;
+          return sum + agencyTotal;
+      }, 0);
+  }
+
   useEffect(() => {
     if (!activeTour) return;
     const fetchAggregatedPersonalData = async () => {
@@ -34,15 +50,14 @@ const HostSettlement: React.FC<CommonTabProps> = ({ user, tours, refreshTours })
             totalCollection += safeNum(data.bookingFee);
             if (data.guests && data.guests.length > 0) {
                 data.guests.forEach(g => {
-                   // Host Settlement Logic: 
-                   // Only count collection if guest is RECEIVED. 
-                   // Ignore absent guests (Penalty is not handled by Host in this settlement).
                    if (g.isReceived) {
-                       totalCollection += safeNum(g.collection);
+                       const collected = safeNum(g.collection);
+                       const totalBill = safeNum(g.totalBillAmount);
+                       totalCollection += (collected > 0 ? collected : totalBill);
                    }
                 });
             } else {
-                // Legacy data assumption (all received)
+                // Legacy
                 const reg = safeNum(data.personalStandardCount) * safeNum(activeTour.fees?.regular);
                 const d1 = safeNum(data.personalDisc1Count) * safeNum(activeTour.fees?.disc1);
                 const d2 = safeNum(data.personalDisc2Count) * safeNum(activeTour.fees?.disc2);
@@ -58,7 +73,7 @@ const HostSettlement: React.FC<CommonTabProps> = ({ user, tours, refreshTours })
       }
     };
     fetchAggregatedPersonalData();
-  }, [activeTour]);
+  }, [activeTour, user]); // Re-run when tour changes
 
   if (!activeTour) return (
       <div className="h-full flex flex-col items-center justify-center p-10 text-center text-slate-400">
@@ -66,17 +81,6 @@ const HostSettlement: React.FC<CommonTabProps> = ({ user, tours, refreshTours })
         <p className="font-bold text-xs">কোন ট্যুর ডাটা পাওয়া যায়নি</p>
       </div>
   );
-
-  let agencyCollection = 0;
-  if (activeTour.partnerAgencies) {
-      agencyCollection = activeTour.partnerAgencies.reduce((sum, agency) => {
-          const agencyTotal = agency.guests ? agency.guests.reduce((gSum, g) => {
-              // Only count received guests for Host Collection
-              return g.isReceived ? gSum + safeNum(g.collection) : gSum;
-          }, 0) : 0;
-          return sum + agencyTotal;
-      }, 0);
-  }
 
   const totalHostCollection = personalCollection + agencyCollection;
   const dailyExpensesTotal = calculateTotalDailyExpenses(activeTour);
@@ -113,9 +117,6 @@ const HostSettlement: React.FC<CommonTabProps> = ({ user, tours, refreshTours })
       }
   };
 
-  // Logic: 
-  // Net > 0: Host Owes Admin. Host is Payer.
-  // Net < 0: Admin Owes Host. Host is Payee.
   const isPayer = netBalance > 0;
 
   return (

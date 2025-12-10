@@ -1,10 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
 import { CommonTabProps, PersonalData, SettlementStatus } from '../types';
 import { db } from '../services/firebase';
-import { doc, getDoc, collection, query, where, getDocs, updateDoc, Timestamp } from 'firebase/firestore';
+import { doc, collection, query, where, getDocs, updateDoc, Timestamp } from 'firebase/firestore';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from 'recharts';
 import { TrendingUp, Activity, Wallet, Building, Coffee, Car, Utensils, Users, ChevronDown, AlertCircle, Bus, Tags, PlusCircle, TrendingDown, CheckCircle, XCircle, Clock, Heart, BarChart3 } from 'lucide-react';
-import { calculateBusFare, calculateTotalDailyExpenses, calculateTotalOtherFixedCosts, safeNum, calculateBuyRates } from '../utils/calculations';
+import { calculateTotalOtherFixedCosts, safeNum, calculateBuyRates } from '../utils/calculations';
 
 const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) => {
   const [selectedTourId, setSelectedTourId] = useState<string>('');
@@ -37,6 +38,7 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
             let pReceivedTotal = 0;
             let pReceivedCouple = 0;
             let pReceivedRegular = 0;
+            let pHostCashInHand = 0;
 
             const pQuery = query(collection(db, 'personal'), where('tourId', '==', activeTour.id));
             const pDocs = await getDocs(pQuery);
@@ -53,13 +55,21 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
                          
                          // If received, add to collection for Host Settlement View
                          if (g.isReceived) {
-                            pCollection += safeNum(g.collection);
+                            const collected = safeNum(g.collection);
+                            const totalBill = safeNum(g.totalBillAmount);
+                            // If collection is 0 but confirmed received, assume full bill was collected (Due Taka)
+                            const cash = collected > 0 ? collected : totalBill;
+                            
+                            pCollection += cash;
+                            pHostCashInHand += cash;
+
                             pReceivedTotal += seats;
                             if (g.isCouple) pReceivedCouple += seats;
                             else pReceivedRegular += seats;
                          } else {
                              const penalty = safeNum(activeTour.penaltyAmount) || 500;
                              pCollection += (seats * penalty);
+                             pHostCashInHand += (seats * penalty); // Penalty collected by Host
                          }
                      });
                  } else {
@@ -74,9 +84,13 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
                      const regFee = Number(activeTour.fees?.regular) || 0;
                      const d1Fee = Number(activeTour.fees?.disc1) || 0;
                      const d2Fee = Number(activeTour.fees?.disc2) || 0;
-                     pCollection += (reg * regFee) + (d1 * d1Fee) + (d2 * d2Fee);
+                     
+                     const amount = (reg * regFee) + (d1 * d1Fee) + (d2 * d2Fee);
+                     pCollection += amount;
+                     pHostCashInHand += amount;
                  }
                  pCollection += bookingFee;
+                 pHostCashInHand += bookingFee;
             });
             
             setPersonalGuestCount(pGuestsCount);
@@ -86,7 +100,7 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
             let aReceivedTotal = 0;
             let aReceivedCouple = 0;
             let aReceivedRegular = 0;
-            let aCollection = 0;
+            let aHostCashInHand = 0;
             
             if (activeTour.partnerAgencies) {
                 activeTour.partnerAgencies.forEach(ag => {
@@ -94,20 +108,25 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
                         ag.guests.forEach(g => {
                             const seats = Number(g.seatCount) || 1;
                             if (g.isReceived) {
-                                aCollection += safeNum(g.collection);
+                                const collected = safeNum(g.collection);
+                                const totalBill = safeNum(g.totalBillAmount);
+                                // Fallback: If 0, use Total Bill
+                                const cash = collected > 0 ? collected : totalBill;
+                                
+                                aHostCashInHand += cash;
                                 aReceivedTotal += seats;
                                 if (g.isCouple) aReceivedCouple += seats;
                                 else aReceivedRegular += seats;
                             } else {
                                 const penalty = safeNum(activeTour.penaltyAmount) || 500;
-                                aCollection += (seats * penalty);
+                                aHostCashInHand += (seats * penalty);
                             }
                         });
                     }
                 });
             }
             
-            setHostCollection(pCollection + aCollection); 
+            setHostCollection(pHostCashInHand + aHostCashInHand); 
             
             setAllGuestsReceivedStats({
                 totalReceived: pReceivedTotal + aReceivedTotal,
@@ -165,8 +184,9 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
   const vacantSeats = Math.max(0, totalSeats - totalBooked);
 
   // Note: agencyCollection calculated above is for Host Settlement view (Received + Penalty).
-  const totalIncome = hostCollection; 
-
+  // This 'totalIncome' is specifically for Profit/Loss chart (usually considers full collection)
+  // But for accurate Host Settlement, we use 'hostCollection' state.
+  
   // Expenses Breakdown
   const totalBusRent = Number(activeTour.busConfig.totalRent || 0);
   const totalHostFee = Number(activeTour.costs.hostFee || 0);
@@ -188,7 +208,9 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
     : 0;
 
   const totalExpenses = totalBusRent + totalHostFee + totalHotelCost + totalCoupleHotelCost + totalOtherFixed + totalDailyMeals + totalDailyTransport + totalDailyExtra;
-  const netProfit = totalIncome - totalExpenses;
+  // This 'netProfit' is for the graph, using personalCollection (derived) + some agency estimation
+  // For the graph we use hostCollection as a proxy for total income
+  const netProfit = hostCollection - totalExpenses;
 
   // Host Settlement Balance
   const hostBusShare = Math.max(0, totalBusRent - safeNum(activeTour.busConfig?.adminPaidRent));
@@ -207,14 +229,9 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
   const calcPerHeadVariable = (amount: number) => Math.ceil(amount / variableDivisor);
   const busPerRegular = Math.ceil(costPerSeat.regularBus || 0);
 
-  const seatData = [
-    { name: 'বুকড', value: totalBooked, color: '#6366f1' },
-    { name: 'খালি', value: vacantSeats, color: '#f1f5f9' },
-  ];
-
   const financialData = [
     { name: 'ব্যয়', amount: totalExpenses, fill: '#ef4444' },
-    { name: 'আয়', amount: totalIncome, fill: '#10b981' },
+    { name: 'আয়', amount: hostCollection, fill: '#10b981' },
   ];
 
   return (
@@ -242,7 +259,6 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
       
       {/* Host Settlement Card */}
       <div className={`p-5 rounded-2xl border shadow-sm flex flex-col gap-4 ${hostSettlementBalance >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-orange-50 border-orange-100'}`}>
-          {/* ... */}
            <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
               <div className="flex items-center gap-4">
                   <div className={`p-3 rounded-full ${hostSettlementBalance >= 0 ? 'bg-blue-200/50 text-blue-700' : 'bg-orange-200/50 text-orange-700'}`}>
@@ -251,10 +267,9 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
                   <div>
                       <div className="flex items-center gap-2">
                           <h3 className={`font-black uppercase text-sm tracking-wide ${hostSettlementBalance >= 0 ? 'text-blue-800' : 'text-orange-800'}`}>হোস্ট সেটেলমেন্ট</h3>
-                          {/* ... Badges ... */}
                       </div>
-                      <p className="text-[10px] font-bold text-slate-500">
-                          (কালেকশন: ৳{hostCollection.toLocaleString()}) - (খরচ: ৳{hostSpending.toLocaleString()})
+                      <p className="text-[10px] font-bold text-slate-500 mt-1">
+                          কালেকশন (Due Taka): ৳{hostCollection.toLocaleString()} - খরচ: ৳{hostSpending.toLocaleString()}
                       </p>
                   </div>
               </div>
@@ -270,7 +285,6 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
           {/* ... Buttons ... */}
           {user.role === 'admin' && (
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-200/50">
-                  {/* ... Logic ... */}
                    {!isAdminPayer && (
                       hostStatus === 'paid' ? (
                         <>
@@ -352,7 +366,6 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
                                 <td className="p-3 text-right font-mono text-slate-500 bg-slate-50/30">৳{calcPerHeadVariable(item.total)} <span className="text-[8px] opacity-50 block sm:inline sm:ml-1 font-sans">(÷{variableDivisor})</span></td>
                             </tr>
                         ))}
-                        {/* ... Totals ... */}
                     </tbody>
                 </table>
              </div>
@@ -411,7 +424,6 @@ const AnalysisTab: React.FC<CommonTabProps> = ({ tours, user, refreshTours }) =>
               <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 text-center relative overflow-hidden">
                   <p className="text-[9px] font-bold text-amber-500 uppercase mb-1">ডিসকাউন্ট ১</p>
                   <p className="text-xl font-black text-amber-600 mb-2">৳{costPerSeat.d1}</p>
-                  {/* ... Bus breakdown ... */}
                   <div className="flex flex-col gap-1">
                       <div className="flex justify-between items-center text-[9px] font-bold bg-white/60 px-2 py-1.5 rounded-lg border border-amber-100/50"><span className="text-amber-500/70">বাস ভাড়া</span><span className="text-amber-600">৳{costPerSeat.d1Bus}</span></div>
                       <div className="flex justify-between items-center text-[9px] font-bold bg-white/60 px-2 py-1.5 rounded-lg border border-amber-100/50"><span className="text-amber-500/70">অন্যান্য</span><span className="text-amber-600">৳{costPerSeat.commonVariable}</span></div>
